@@ -2,8 +2,9 @@
 from aiogram import Bot, Dispatcher
 from aiogram.types import BotCommand
 from aiogram.fsm.storage.memory import MemoryStorage
+
 from config import BOT_TOKEN
-from handlers import start
+from handlers import start, register
 
 
 async def main():
@@ -11,6 +12,7 @@ async def main():
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
     dp.include_router(start.router)
+    dp.include_router(register.router)
 
     await bot.set_my_commands([
         BotCommand(command="start", description="Начать")
