@@ -116,8 +116,7 @@ async def process_role_selection(callback: types.CallbackQuery, state: FSMContex
         )
     except Exception as e:
         logger.error("Registration error: %s", e)
-        await answer_and_delete(callback.message, "❌ Ошибка при регистрации. Попробуйте позже.")
-        await state.clear()
+        await handle_registration_error(callback, state)
         return
 
     if result:
@@ -140,7 +139,36 @@ async def process_role_selection(callback: types.CallbackQuery, state: FSMContex
             pass
 
     else:
-        await answer_and_delete(callback.message, "❌ Ошибка при регистрации. Попробуйте позже.")
+        await handle_registration_error(callback, state)
+
+    await state.clear()
+
+
+async def handle_registration_error(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    chat_id = callback.message.chat.id
+    success_msg_id = data.get("success_msg_id")
+
+    delete_tasks = []
+
+    if success_msg_id:
+        delete_tasks.append(
+            callback.bot.delete_message(chat_id, success_msg_id)
+        )
+
+    delete_tasks.append(
+        callback.bot.delete_message(chat_id, callback.message.message_id)
+    )
+
+    try:
+        await asyncio.gather(*delete_tasks)
+    except (TelegramBadRequest, TelegramAPIError):
+        pass
+
+    await callback.message.answer("❌ Ошибка при регистрации. Попробуйте позже.")
+
+    from handlers.start import cmd_start
+    await cmd_start(callback.message)
 
     await state.clear()
 
