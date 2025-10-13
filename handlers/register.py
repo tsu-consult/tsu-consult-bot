@@ -1,8 +1,17 @@
-﻿import logging
+﻿import asyncio
+import logging
 
 from aiogram import Router, F, types
+from aiogram.exceptions import TelegramBadRequest, TelegramAPIError
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import (
+    Message,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardRemove
+)
 
 from services.auth import TSUAuth
 from states.register import RegisterState
@@ -10,6 +19,7 @@ from utils.messages import answer_and_delete, edit_step
 
 router = Router()
 logger = logging.getLogger(__name__)
+
 
 @router.message(F.text == "/register")
 async def start_registration(message: Message, state: FSMContext):
@@ -54,6 +64,12 @@ async def process_contact(message: Message, state: FSMContext):
         first_name=first_name,
         last_name=last_name
     )
+
+    success_msg = await message.answer(
+        "Успешно ✅",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    await state.update_data(success_msg_id=success_msg.message_id)
 
     role_keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
@@ -105,7 +121,24 @@ async def process_role_selection(callback: types.CallbackQuery, state: FSMContex
         return
 
     if result:
-        await edit_step(callback.message, state, "✅ Регистрация прошла успешно!")
+        success_msg_id = data.get("success_msg_id")
+
+        tasks = []
+
+        if success_msg_id:
+            tasks.append(
+                callback.bot.delete_message(callback.message.chat.id, success_msg_id)
+            )
+
+        tasks.append(
+            edit_step(callback.message, state, "✅ Регистрация прошла успешно!")
+        )
+
+        try:
+            await asyncio.gather(*tasks)
+        except (TelegramBadRequest, TelegramAPIError):
+            pass
+
     else:
         await answer_and_delete(callback.message, "❌ Ошибка при регистрации. Попробуйте позже.")
 
