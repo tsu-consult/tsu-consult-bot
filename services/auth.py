@@ -40,6 +40,30 @@ class TSUAuth:
             return True
         return False
 
+    def register(
+            self,
+            username: str,
+            first_name: str = "",
+            last_name: str = "",
+            phone_number: str = "",
+            role: str = "student"
+    ):
+        payload = {
+            "username": username,
+            "telegram_id": self.telegram_id,
+            "first_name": first_name,
+            "last_name": last_name,
+            "phone_number": phone_number,
+            "role": role
+        }
+        response = requests.post(f"{self.BASE_URL}/auth/register/", json=payload)
+        response.raise_for_status()
+        data = response.json()
+        self.access_token = data["access"]
+        self.refresh_token = data["refresh"]
+        self._save_tokens()
+        return data
+
     def login(self, telegram_id: int):
         self.telegram_id = telegram_id
 
