@@ -26,6 +26,9 @@ class TSUAuth:
         self.refresh_token: Optional[str] = None
         self.telegram_id: Optional[int] = None
 
+        self.access_ttl = getattr(config, "ACCESS_EXPIRES_IN", 300)
+        self.refresh_ttl = getattr(config, "REFRESH_EXPIRES_IN", 86400)
+
     def _headers(self):
         headers = {"Content-Type": "application/json"}
         if self.access_token:
@@ -35,12 +38,16 @@ class TSUAuth:
     def _save_tokens(self):
         if self.telegram_id and self.access_token and self.refresh_token:
             try:
-                data = json.dumps({
-                    "access": self.access_token,
-                    "refresh": self.refresh_token
-                })
-                self.redis.set(f"tsu_tokens:{self.telegram_id}", data)
-                logger.info(f"Tokens saved for telegram_id={self.telegram_id}")
+                key_access = f"tsu_access:{self.telegram_id}"
+                key_refresh = f"tsu_refresh:{self.telegram_id}"
+
+                self.redis.setex(key_access, self.access_ttl, self.access_token)
+                self.redis.setex(key_refresh, self.refresh_ttl, self.refresh_token)
+
+                logger.info(
+                    f"Tokens saved for telegram_id={self.telegram_id} "
+                    f"(access TTL={self.access_ttl}s, refresh TTL={self.refresh_ttl}s)"
+                )
             except redis.RedisError as e:
                 logger.error(f"Redis error (save): {e}")
 
@@ -48,14 +55,15 @@ class TSUAuth:
         if not self.telegram_id:
             return False
         try:
-            data = self.redis.get(f"tsu_tokens:{self.telegram_id}")
-            if data:
-                tokens = json.loads(data)
-                self.access_token = tokens.get("access")
-                self.refresh_token = tokens.get("refresh")
+            access_token = self.redis.get(f"tsu_access:{self.telegram_id}")
+            refresh_token = self.redis.get(f"tsu_refresh:{self.telegram_id}")
+
+            if access_token and refresh_token:
+                self.access_token = access_token
+                self.refresh_token = refresh_token
                 logger.info(f"Tokens loaded for telegram_id={self.telegram_id}")
                 return True
-        except (redis.RedisError, json.JSONDecodeError) as e:
+        except redis.RedisError as e:
             logger.error(f"Redis error (load): {e}")
         return False
 
@@ -163,7 +171,8 @@ class TSUAuth:
             else:
                 logger.error("Refresh failed: %s", response.text)
                 if self.telegram_id:
-                    self.redis.delete(f"tsu_tokens:{self.telegram_id}")
+                    self.redis.delete(f"tsu_access:{self.telegram_id}")
+                    self.redis.delete(f"tsu_refresh:{self.telegram_id}")
                 self.access_token = None
                 self.refresh_token = None
                 raise ValueError("Ошибка обновления токена. Авторизуйтесь снова.")
@@ -189,7 +198,8 @@ class TSUAuth:
             logger.info("Logout response: %s | %s", response.status_code, response.text)
 
             if response.status_code == 200 and self.telegram_id:
-                self.redis.delete(f"tsu_tokens:{self.telegram_id}")
+                self.redis.delete(f"tsu_access:{self.telegram_id}")
+                self.redis.delete(f"tsu_refresh:{self.telegram_id}")
                 logger.info("Tokens deleted from Redis for telegram_id=%s", self.telegram_id)
             else:
                 logger.error("Logout failed: %s", response.text)
