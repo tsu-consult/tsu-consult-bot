@@ -37,8 +37,8 @@ async def start_registration(event: Message | CallbackQuery, state: FSMContext):
         telegram_id = event.from_user.id
         message = event
 
-    if await auth.is_registered(telegram_id):
-        role = await auth.get_role(telegram_id)
+    role = await auth.get_role(telegram_id)
+    if role:
         await show_main_menu(message, role)
         return
 

@@ -84,46 +84,10 @@ class TSUAuth:
         self.access_token = None
         self.refresh_token = None
 
-    async def ensure_logged_in(self, telegram_id: int) -> bool:
-        self.telegram_id = telegram_id
-        await self.init_redis()
-        await self.init_session()
-
-        if self.access_token and self.refresh_token:
-            return True
-
-        if await self._load_tokens():
-            return True
-
-        try:
-            await self.login(telegram_id)
-            return True
-        except ValueError:
-            return False
-
-    async def is_registered(self, telegram_id: int) -> bool:
-        if not await self.ensure_logged_in(telegram_id):
-            return False
-
-        try:
-            response = await self.api_request("GET", "profile/")
-            if response.get("detail") == "Not found" or response.get("role") is None:
-                await self._delete_tokens()
-                return False
-            return True
-        except aiohttp.ClientResponseError as e:
-            if e.status in (401, 404):
-                await self._delete_tokens()
-                return False
-            raise
-        except Exception as e:
-            logger.warning(f"Registration check failed for {telegram_id}: {e}")
-            await self._delete_tokens()
-            return False
-
     async def get_role(self, telegram_id: int) -> Optional[str]:
         self.telegram_id = telegram_id
         await self.init_redis()
+        await self.init_session()
 
         try:
             role = await self.redis.get(f"tsu_role:{telegram_id}")
@@ -132,22 +96,23 @@ class TSUAuth:
         except aioredis.RedisError as e:
             logger.warning(f"Redis error while getting role for {telegram_id}: {e}")
 
-        if not (self.access_token and self.refresh_token) and not await self._load_tokens():
-            return None
+        if not (self.access_token and self.refresh_token):
+            await self._load_tokens()
 
         try:
             response = await self.api_request("GET", "profile/")
             role = response.get("role")
+            if role in ("student", "teacher"):
+                try:
+                    await self.redis.setex(f"tsu_role:{telegram_id}", self.role_ttl, role)
+                except aioredis.RedisError as e:
+                    logger.warning(f"Redis error while saving role for {telegram_id}: {e}")
+                return role
+        except aiohttp.ClientResponseError as e:
+            if e.status == 401:
+                await self._delete_tokens()
         except Exception as e:
             logger.warning(f"Failed to get role for {telegram_id}: {e}")
-            return None
-
-        if role in ("student", "teacher"):
-            try:
-                await self.redis.setex(f"tsu_role:{telegram_id}", self.role_ttl, role)
-            except aioredis.RedisError as e:
-                logger.warning(f"Redis error while saving role for {telegram_id}: {e}")
-            return role
         return None
 
     async def api_request(self, method: str, endpoint: str, **kwargs):

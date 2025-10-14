@@ -14,8 +14,7 @@ router = Router()
 async def cmd_start(message: Message):
     telegram_id = message.from_user.id
 
-    registered = await auth.is_registered(telegram_id)
-    role = await auth.get_role(telegram_id) if registered else None
+    role = await auth.get_role(telegram_id)
     await show_main_menu(message, role)
 
 @router.callback_query(lambda c: c.data == "start")
