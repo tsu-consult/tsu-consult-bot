@@ -1,10 +1,8 @@
 ﻿import logging
-from typing import Optional
-
 import aiohttp
-from redis import asyncio as aioredis
-
 import config
+from typing import Optional
+from redis import asyncio as aioredis
 
 logging.basicConfig(
     level=logging.INFO,
@@ -49,7 +47,7 @@ class TSUAuth:
         except Exception as e:
             logger.error(f"Redis error (_save_tokens): {e}")
 
-    async def _load_tokens(self):
+    async def _load_tokens(self) -> bool:
         if not self.redis or not self.telegram_id:
             return False
         try:
@@ -76,72 +74,66 @@ class TSUAuth:
         self.access_token = None
         self.refresh_token = None
 
-    async def is_registered(self, telegram_id: int) -> bool:
+    async def ensure_logged_in(self, telegram_id: int) -> bool:
         self.telegram_id = telegram_id
         await self.init_redis()
 
-        refresh_token = await self.redis.get(f"tsu_refresh:{self.telegram_id}")
-        access_token = await self.redis.get(f"tsu_access:{self.telegram_id}")
+        if self.access_token and self.refresh_token:
+            return True
 
-        self.refresh_token = refresh_token
-        self.access_token = access_token
+        if await self._load_tokens():
+            return True
 
-        if not self.refresh_token:
-            try:
-                login_data = await self.login(telegram_id)
-                return bool(login_data)
-            except (aiohttp.ClientError, ValueError, aioredis.RedisError) as e:
-                logger.warning(f"Login failed for {telegram_id}: {e}")
+        try:
+            await self.login(telegram_id)
+            return True
+        except ValueError:
+            return False
+
+    async def is_registered(self, telegram_id: int) -> bool:
+        if not await self.ensure_logged_in(telegram_id):
+            return False
+
+        try:
+            response = await self.api_request("GET", "profile/")
+            if response.get("detail") == "Not found" or response.get("role") is None:
+                await self._delete_tokens()
                 return False
-
-        if not self.access_token:
-            try:
-                await self._auto_refresh()
-            except (aiohttp.ClientError, ValueError, aioredis.RedisError) as e:
-                logger.warning(f"Auto-refresh failed for {telegram_id}: {e}")
-                try:
-                    login_data = await self.login(telegram_id)
-                    return bool(login_data)
-                except (aiohttp.ClientError, ValueError, aioredis.RedisError) as e2:
-                    logger.warning(f"Re-login failed for {telegram_id}: {e2}")
-                    return False
-        return True
-
-    async def _auto_refresh(self):
-        if self.access_token or not self.refresh_token:
-            return
-        logger.info(f"Access token missing or expired, refreshing for telegram_id={self.telegram_id}")
-        await self.refresh()
+            return True
+        except aiohttp.ClientResponseError as e:
+            if e.status in (401, 404):
+                await self._delete_tokens()
+                return False
+            raise
+        except Exception as e:
+            logger.warning(f"Registration check failed for {telegram_id}: {e}")
+            await self._delete_tokens()
+            return False
 
     async def get_role(self, telegram_id: int) -> Optional[str]:
         self.telegram_id = telegram_id
         await self.init_redis()
 
         try:
-            role = await self.redis.get(f"tsu_role:{self.telegram_id}")
+            role = await self.redis.get(f"tsu_role:{telegram_id}")
             if role:
                 return role
         except aioredis.RedisError as e:
             logger.warning(f"Redis error while getting role for {telegram_id}: {e}")
 
-        try:
-            tokens = await self._load_tokens()
-            if not tokens:
-                await self.login(telegram_id)
-        except (aiohttp.ClientError, ValueError, aioredis.RedisError) as e:
-            logger.warning(f"Token loading or login failed for {telegram_id}: {e}")
+        if not await self.ensure_logged_in(telegram_id):
             return None
 
         try:
             response = await self.api_request("GET", "profile/")
             role = response.get("role")
-        except (aiohttp.ClientError, ValueError) as e:
+        except Exception as e:
             logger.warning(f"Failed to get role for {telegram_id}: {e}")
             return None
 
         if role in ("student", "teacher"):
             try:
-                await self.redis.setex(f"tsu_role:{self.telegram_id}", self.role_ttl, role)
+                await self.redis.setex(f"tsu_role:{telegram_id}", self.role_ttl, role)
             except aioredis.RedisError as e:
                 logger.warning(f"Redis error while saving role for {telegram_id}: {e}")
             return role
@@ -166,9 +158,6 @@ class TSUAuth:
         self.telegram_id = telegram_id
         await self.init_redis()
 
-        if await self._load_tokens():
-            return {"access": self.access_token, "refresh": self.refresh_token}
-
         async with aiohttp.ClientSession() as session:
             async with session.post(f"{self.BASE_URL}auth/login/", json={"telegram_id": telegram_id}) as resp:
                 if resp.status == 404:
@@ -179,6 +168,26 @@ class TSUAuth:
                 self.refresh_token = data.get("refresh")
                 await self._save_tokens()
                 return data
+
+    async def _auto_refresh(self):
+        if self.access_token or not self.refresh_token:
+            return
+        logger.info(f"Access token missing or expired, refreshing for telegram_id={self.telegram_id}")
+        await self.refresh()
+
+    async def refresh(self):
+        if not self.refresh_token:
+            raise ValueError("Нет refresh_token для обновления")
+        async with aiohttp.ClientSession() as session:
+            async with session.post(f"{self.BASE_URL}auth/refresh/", json={"refresh": self.refresh_token}) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    self.access_token = data.get("access")
+                    await self._save_tokens()
+                elif resp.status in (400, 404):
+                    await self.login(self.telegram_id)
+                else:
+                    raise ValueError(f"Ошибка при обновлении токена: {resp.status}")
 
     async def register(self, telegram_id: int, username: str, first_name: str = "",
                        last_name: str = "", phone_number: str = "", role: str = "student"):
@@ -204,23 +213,6 @@ class TSUAuth:
                 self.refresh_token = data.get("refresh")
                 await self._save_tokens()
                 return data
-
-    async def refresh(self):
-        if not self.refresh_token:
-            raise ValueError("Нет refresh_token для обновления")
-
-        async with aiohttp.ClientSession() as session:
-            async with session.post(f"{self.BASE_URL}auth/refresh/", json={"refresh": self.refresh_token}) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    self.access_token = data.get("access")
-                    await self._save_tokens()
-                    return True
-                elif resp.status in (400, 403):
-                    await self.login(self.telegram_id)
-                    return True
-                else:
-                    raise ValueError(f"Ошибка при обновлении токена: {resp.status}")
 
     async def logout(self):
         if not self.refresh_token:
