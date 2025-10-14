@@ -100,6 +100,33 @@ class TSUAuth:
             logger.info(f"Access token missing or expired, refreshing for telegram_id={self.telegram_id}")
             self.refresh()
 
+    def get_role(self, telegram_id: int) -> Optional[str]:
+        self.telegram_id = telegram_id
+
+        try:
+            if not self._load_tokens():
+                logger.warning(f"No tokens found in Redis for telegram_id={telegram_id}, trying login()")
+                self.login(telegram_id)
+
+            response = self.api_request("GET", f"/profile/")
+            if not response:
+                logger.error(f"No response from /profile for telegram_id={telegram_id}")
+                return None
+
+            role = response.get("role")
+            if role in ("student", "teacher"):
+                logger.info(f"Detected role={role} for telegram_id={telegram_id}")
+                return role
+
+            logger.warning(f"Unknown role '{role}' for telegram_id={telegram_id}")
+            return None
+        except ValueError as e:
+            logger.error(f"Failed to get role for telegram_id={telegram_id}: {e}")
+            return None
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Network error while fetching role for telegram_id={telegram_id}: {e}")
+            return None
+
     @staticmethod
     def _extract_error_message(data):
         if isinstance(data, dict):

@@ -12,10 +12,10 @@ from aiogram.types import (
     InlineKeyboardButton,
     ReplyKeyboardMarkup,
     KeyboardButton,
-    ReplyKeyboardRemove
+    ReplyKeyboardRemove, BotCommand, BotCommandScopeChat, CallbackQuery
 )
 
-from keyboards.main import student_menu, teacher_menu
+from keyboards.main import show_main_menu
 from services.auth import TSUAuth
 from states.register import RegisterState
 from utils.messages import answer_and_delete, edit_step
@@ -23,13 +23,22 @@ from utils.messages import answer_and_delete, edit_step
 router = Router()
 logger = logging.getLogger(__name__)
 
+HOME_COMMANDS = [
+    BotCommand(command="/home", description="Главное меню")
+]
+
 
 @router.message(F.text == "/register")
-async def start_registration(message: Message, state: FSMContext):
-    auth = TSUAuth()
-    telegram_id = message.from_user.id
+@router.callback_query(lambda c: c.data == "start")
+async def start_registration(event: Message | CallbackQuery, state: FSMContext):
+    if isinstance(event, types.CallbackQuery):
+        telegram_id = event.from_user.id
+        message = event.message
+    else:
+        telegram_id = event.from_user.id
+        message = event
 
-    auth.telegram_id = telegram_id
+    auth = TSUAuth()
     if auth.is_registered(telegram_id):
         await answer_and_delete(message, "✅ Вы уже зарегистрированы и авторизованы.")
         return
@@ -93,7 +102,7 @@ async def process_contact(message: Message, state: FSMContext):
 
 
 @router.callback_query(RegisterState.waiting_for_role, F.data.startswith("role_"))
-async def process_role_selection(callback: types.CallbackQuery, state: FSMContext):
+async def process_role_selection(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     role = callback.data.split("_")[1]
 
@@ -139,15 +148,20 @@ async def process_role_selection(callback: types.CallbackQuery, state: FSMContex
         if success_msg_id:
             tasks.append(callback.bot.delete_message(callback.message.chat.id, success_msg_id))
         tasks.append(edit_step(callback.message, state, "✅ Регистрация прошла успешно!"))
+
+        tasks.append(
+            callback.bot.set_my_commands(
+                commands=HOME_COMMANDS,
+                scope=BotCommandScopeChat(chat_id=callback.message.chat.id)
+            )
+        )
+
         try:
             await asyncio.gather(*tasks)
         except (TelegramBadRequest, TelegramAPIError):
             pass
 
-        if role == "student":
-            await callback.message.answer("Вы вошли как студент 🎓", reply_markup=student_menu)
-        elif role == "teacher":
-            await callback.message.answer("Вы вошли как преподаватель 👨‍🏫", reply_markup=teacher_menu)
+        await show_main_menu(callback.message, role)
 
     else:
         await handle_registration_error(callback, state)

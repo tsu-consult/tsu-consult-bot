@@ -1,4 +1,5 @@
 from aiogram import types
+from aiogram.types import Message, BotCommand, BotCommandScopeChat
 
 student_menu = types.InlineKeyboardMarkup(
     inline_keyboard=[
@@ -53,3 +54,12 @@ guest_menu = types.InlineKeyboardMarkup(
         ]
     ]
 )
+
+
+async def show_main_menu(message: Message, role: str | None):
+    if role == "student":
+        await message.answer("Вы вошли как студент 🎓", reply_markup=student_menu)
+    elif role == "teacher":
+        await message.answer("Вы вошли как преподаватель 👨‍🏫", reply_markup=teacher_menu)
+    else:
+        await message.answer("👋 Привет!\n\nЧтобы продолжить, зарегистрируйтесь или войдите в систему:", reply_markup=guest_menu)
