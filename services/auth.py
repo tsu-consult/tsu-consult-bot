@@ -70,6 +70,45 @@ class TSUAuth:
             logger.info(f"Access token missing or expired, refreshing for telegram_id={self.telegram_id}")
             self.refresh()
 
+    @staticmethod
+    def _extract_error_message(data):
+        if isinstance(data, dict):
+            messages = []
+            for value in data.values():
+                if isinstance(value, list):
+                    messages.append(str(value[0]))
+                else:
+                    messages.append(str(value))
+            return " ".join(messages)
+        elif isinstance(data, list):
+            return " ".join(map(str, data))
+        return str(data)
+
+    @staticmethod
+    def _translate_error(text: str) -> str:
+        text_lower = text.lower()
+
+        translations = {
+            "user already exists": "Такой пользователь уже существует.",
+            "phone number already exists": "Этот номер телефона уже используется.",
+            "invalid phone number": "Некорректный номер телефона.",
+            "invalid credentials": "Неверные данные для входа.",
+            "missing field": "Не заполнено обязательное поле.",
+            "password too short": "Слишком короткий пароль.",
+            "username": "Некорректное имя пользователя или пользователь уже существует.",
+            "email already exists": "Эта почта уже используется.",
+            "internal server error": "Ошибка на сервере. Попробуйте позже.",
+            "permission denied": "Доступ запрещён."
+        }
+
+        for eng, rus in translations.items():
+            if eng in text_lower:
+                return rus
+
+        return text.capitalize()
+
+
+
     def api_request(self, method: str, endpoint: str, **kwargs):
         self._auto_refresh()
         url = f"{self.BASE_URL}{endpoint}"
@@ -118,8 +157,15 @@ class TSUAuth:
             logger.info("Register response: %s | %s", response.status_code, response.text)
 
             if response.status_code not in (200, 201):
-                logger.error("Register failed: %s", response.text)
-                raise ValueError("Ошибка регистрации. Попробуйте снова.")
+                try:
+                    error_data = response.json()
+                    details = self._extract_error_message(error_data)
+                except json.JSONDecodeError:
+                    details = response.text or "Unknown error"
+
+                translated = self._translate_error(details)
+                error_msg = f"Ошибка регистрации\n\n{translated}"
+                raise ValueError(error_msg)
 
             data = response.json()
             self.access_token = data.get("access")
@@ -128,7 +174,7 @@ class TSUAuth:
             return data
         except requests.exceptions.RequestException as e:
             logger.error("Network error during register: %s", e)
-            raise ValueError("Ошибка соединения с сервером.")
+            raise ValueError("Ошибка соединения с сервером. Проверьте интернет или попробуйте позже.")
         except json.JSONDecodeError:
             logger.error("Invalid JSON response from server")
             raise ValueError("Некорректный ответ от сервера.")

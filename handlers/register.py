@@ -1,6 +1,8 @@
 ﻿import asyncio
+import json
 import logging
 
+import requests
 from aiogram import Router, F, types
 from aiogram.exceptions import TelegramBadRequest, TelegramAPIError
 from aiogram.fsm.context import FSMContext
@@ -114,9 +116,16 @@ async def process_role_selection(callback: types.CallbackQuery, state: FSMContex
             phone_number=phone_number,
             role=role
         )
-    except Exception as e:
-        logger.error("Registration error: %s", e)
-        await handle_registration_error(callback, state)
+    except json.JSONDecodeError as e:
+        logger.error("Invalid JSON response: %s", e)
+        await handle_registration_error(callback, state, "Некорректный ответ от сервера.")
+        return
+    except ValueError as e:
+        await handle_registration_error(callback, state, str(e))
+        return
+    except requests.exceptions.RequestException as e:
+        logger.error("Network error during registration: %s", e)
+        await handle_registration_error(callback, state, "Ошибка соединения с сервером.")
         return
 
     if result:
@@ -125,14 +134,8 @@ async def process_role_selection(callback: types.CallbackQuery, state: FSMContex
         tasks = []
 
         if success_msg_id:
-            tasks.append(
-                callback.bot.delete_message(callback.message.chat.id, success_msg_id)
-            )
-
-        tasks.append(
-            edit_step(callback.message, state, "✅ Регистрация прошла успешно!")
-        )
-
+            tasks.append(callback.bot.delete_message(callback.message.chat.id, success_msg_id))
+        tasks.append(edit_step(callback.message, state, "✅ Регистрация прошла успешно!"))
         try:
             await asyncio.gather(*tasks)
         except (TelegramBadRequest, TelegramAPIError):
@@ -144,7 +147,7 @@ async def process_role_selection(callback: types.CallbackQuery, state: FSMContex
     await state.clear()
 
 
-async def handle_registration_error(callback: types.CallbackQuery, state: FSMContext):
+async def handle_registration_error(callback: types.CallbackQuery, state: FSMContext, error_text: str = None):
     data = await state.get_data()
     chat_id = callback.message.chat.id
     success_msg_id = data.get("success_msg_id")
@@ -152,20 +155,16 @@ async def handle_registration_error(callback: types.CallbackQuery, state: FSMCon
     delete_tasks = []
 
     if success_msg_id:
-        delete_tasks.append(
-            callback.bot.delete_message(chat_id, success_msg_id)
-        )
-
-    delete_tasks.append(
-        callback.bot.delete_message(chat_id, callback.message.message_id)
-    )
+        delete_tasks.append(callback.bot.delete_message(chat_id, success_msg_id))
+    delete_tasks.append(callback.bot.delete_message(chat_id, callback.message.message_id))
 
     try:
         await asyncio.gather(*delete_tasks)
     except (TelegramBadRequest, TelegramAPIError):
         pass
 
-    await callback.message.answer("❌ Ошибка при регистрации. Попробуйте позже.")
+    user_message = error_text or "❌ Ошибка при регистрации. Попробуйте позже."
+    await callback.message.answer(f"❌ {user_message}")
 
     from handlers.start import cmd_start
     await cmd_start(callback.message)
