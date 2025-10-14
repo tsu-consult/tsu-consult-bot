@@ -39,6 +39,13 @@ async def start_registration(event: Message | CallbackQuery, state: FSMContext):
             await auth.login(telegram_id)
             role = await auth.get_role(telegram_id)
             if role:
+                await message.bot.set_my_commands(
+                    commands=[
+                        BotCommand(command="/home", description="Главное меню"),
+                    ],
+                    scope=BotCommandScopeChat(chat_id=message.chat.id)
+                )
+
                 await show_main_menu(message, role)
                 return
         except ValueError:
