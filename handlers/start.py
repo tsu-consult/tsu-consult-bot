@@ -15,11 +15,9 @@ async def cmd_start(message: Message):
     auth = TSUAuth()
     telegram_id = message.from_user.id
 
-    if auth.is_registered(telegram_id):
-        role = auth.get_role(telegram_id)
-        await show_main_menu(message, role)
-    else:
-        await show_main_menu(message, None)
+    registered = await auth.is_registered(telegram_id)
+    role = await auth.get_role(telegram_id) if registered else None
+    await show_main_menu(message, role)
 
 @router.callback_query(lambda c: c.data == "start")
 async def start_register_callback(callback: CallbackQuery, state: FSMContext):

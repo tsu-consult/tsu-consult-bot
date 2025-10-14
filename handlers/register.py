@@ -2,7 +2,6 @@
 import json
 import logging
 
-import requests
 from aiogram import Router, F, types
 from aiogram.exceptions import TelegramBadRequest, TelegramAPIError
 from aiogram.fsm.context import FSMContext
@@ -39,8 +38,8 @@ async def start_registration(event: Message | CallbackQuery, state: FSMContext):
         message = event
 
     auth = TSUAuth()
-    if auth.is_registered(telegram_id):
-        role = auth.get_role(telegram_id)
+    if await auth.is_registered(telegram_id):
+        role = await auth.get_role(telegram_id)
         await show_main_menu(message, role)
         return
 
@@ -121,7 +120,7 @@ async def process_role_selection(callback: CallbackQuery, state: FSMContext):
     )
 
     try:
-        result = auth.register(
+        result = await auth.register(
             telegram_id=telegram_id,
             username=username,
             first_name=first_name,
@@ -135,10 +134,6 @@ async def process_role_selection(callback: CallbackQuery, state: FSMContext):
         return
     except ValueError as e:
         await handle_registration_error(callback, state, str(e))
-        return
-    except requests.exceptions.RequestException as e:
-        logger.error("Network error during registration: %s", e)
-        await handle_registration_error(callback, state, "Ошибка соединения с сервером.")
         return
 
     if result:
