@@ -4,6 +4,7 @@ import logging
 
 from aiogram import Router, F, types
 from aiogram.exceptions import TelegramBadRequest, TelegramAPIError
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import (
     Message,
@@ -22,12 +23,8 @@ from utils.messages import edit_step
 router = Router()
 logger = logging.getLogger(__name__)
 
-HOME_COMMANDS = [
-    BotCommand(command="/home", description="Главное меню")
-]
 
-
-@router.message(F.text == "/register")
+@router.message(Command("register"))
 async def start_registration(event: Message | CallbackQuery, state: FSMContext):
     if isinstance(event, types.CallbackQuery):
         telegram_id = event.from_user.id
@@ -37,9 +34,15 @@ async def start_registration(event: Message | CallbackQuery, state: FSMContext):
         message = event
 
     role = await auth.get_role(telegram_id)
-    if role:
-        await show_main_menu(message, role)
-        return
+    if not role:
+        try:
+            await auth.login(telegram_id)
+            role = await auth.get_role(telegram_id)
+            if role:
+                await show_main_menu(message, role)
+                return
+        except ValueError:
+            pass
 
     await state.update_data(
         telegram_id=telegram_id
@@ -143,8 +146,10 @@ async def process_role_selection(callback: CallbackQuery, state: FSMContext):
 
         tasks.append(
             callback.bot.set_my_commands(
-                commands=HOME_COMMANDS,
-                scope=BotCommandScopeChat(chat_id=callback.message.chat.id)
+                commands = [
+                    BotCommand(command="/home", description="Главное меню"),
+                ],
+                scope = BotCommandScopeChat(chat_id=callback.message.chat.id)
             )
         )
 
