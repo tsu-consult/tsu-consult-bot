@@ -33,6 +33,10 @@ async def start_registration(message: Message, state: FSMContext):
         await answer_and_delete(message, "✅ Вы уже зарегистрированы и авторизованы.")
         return
 
+    await state.update_data(
+        telegram_id=telegram_id
+    )
+
     keyboard = ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="📱 Отправить контакт", request_contact=True)]],
         resize_keyboard=True,
@@ -40,7 +44,7 @@ async def start_registration(message: Message, state: FSMContext):
     )
 
     await message.answer(
-        "Пожалуйста, поделитесь вашим контактом для регистрации.",
+        "Пожалуйста, поделитесь вашим контактом для регистрации:",
         reply_markup=keyboard
     )
     await state.set_state(RegisterState.waiting_for_contact)
@@ -50,7 +54,6 @@ async def start_registration(message: Message, state: FSMContext):
 async def process_contact(message: Message, state: FSMContext):
     contact = message.contact
 
-    telegram_id = contact.user_id
     phone_number = contact.phone_number
     raw_username = message.from_user.username
 
@@ -60,7 +63,6 @@ async def process_contact(message: Message, state: FSMContext):
     last_name = contact.last_name or ""
 
     await state.update_data(
-        telegram_id=telegram_id,
         phone_number=phone_number,
         username=username,
         first_name=first_name,

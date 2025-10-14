@@ -49,7 +49,7 @@ teacher_menu = types.InlineKeyboardMarkup(
 guest_menu = types.InlineKeyboardMarkup(
     inline_keyboard=[
         [
-            types.InlineKeyboardButton(text="🔑 Регистрация / Вход", callback_data="start_register")
+            types.InlineKeyboardButton(text="🔑 Регистрация / Вход", callback_data="start")
         ]
     ]
 )

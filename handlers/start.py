@@ -12,7 +12,7 @@ router = Router()
 async def cmd_start(message: types.Message):
     await message.answer("👋 Привет!\n\nЧтобы продолжить, зарегистрируйтесь или войдите в систему:", reply_markup=guest_menu)
 
-@router.callback_query(lambda c: c.data == "start_register")
+@router.callback_query(lambda c: c.data == "start")
 async def start_register_callback(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.delete()
     await register.start_registration(callback.message, state)

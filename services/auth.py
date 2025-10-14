@@ -63,7 +63,19 @@ class TSUAuth:
 
     def is_registered(self, telegram_id: int) -> bool:
         self.telegram_id = telegram_id
-        return self._load_tokens()
+        try:
+            refresh_token = self.redis.get(f"tsu_refresh:{self.telegram_id}")
+            if refresh_token:
+                self.refresh_token = refresh_token
+                access_token = self.redis.get(f"tsu_access:{self.telegram_id}")
+                if not access_token:
+                    self.refresh()
+                else:
+                    self.access_token = access_token
+                return True
+        except redis.RedisError:
+            pass
+        return False
 
     def _auto_refresh(self):
         if not self.access_token and self.refresh_token:
