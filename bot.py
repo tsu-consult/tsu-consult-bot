@@ -5,6 +5,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from config import BOT_TOKEN
 from handlers import start, register
+from services.auth import shutdown
 
 
 async def main():
@@ -23,6 +24,7 @@ async def main():
     try:
         await dp.start_polling(bot)
     finally:
+        asyncio.run(shutdown())
         await bot.session.close()
 
 if __name__ == "__main__":

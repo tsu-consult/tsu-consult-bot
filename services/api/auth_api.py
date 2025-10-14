@@ -16,6 +16,7 @@ class TSUAuth:
 
     def __init__(self):
         self.redis: Optional[aioredis.Redis] = None
+        self.session: Optional[aiohttp.ClientSession] = None
         self.access_token: Optional[str] = None
         self.refresh_token: Optional[str] = None
         self.telegram_id: Optional[int] = None
@@ -30,6 +31,15 @@ class TSUAuth:
                 f"redis://{config.REDIS_HOST}:{config.REDIS_PORT}/{config.REDIS_DB}",
                 decode_responses=True
             )
+
+    async def init_session(self):
+        if self.session is None or self.session.closed:
+            self.session = aiohttp.ClientSession()
+
+    async def close_session(self):
+        if self.session and not self.session.closed:
+            await self.session.close()
+            self.session = None
 
     def _headers(self):
         headers = {"Content-Type": "application/json"}
@@ -77,6 +87,7 @@ class TSUAuth:
     async def ensure_logged_in(self, telegram_id: int) -> bool:
         self.telegram_id = telegram_id
         await self.init_redis()
+        await self.init_session()
 
         if self.access_token and self.refresh_token:
             return True
@@ -141,33 +152,34 @@ class TSUAuth:
 
     async def api_request(self, method: str, endpoint: str, **kwargs):
         await self._auto_refresh()
+        await self.init_session()
+
         url = f"{self.BASE_URL}{endpoint}"
         headers = kwargs.pop("headers", {})
         headers.update(self._headers())
 
-        async with aiohttp.ClientSession() as session:
-            async with session.request(method, url, headers=headers, **kwargs) as resp:
-                if resp.status == 401 and self.refresh_token:
-                    await self.refresh()
-                    headers = self._headers()
-                    async with session.request(method, url, headers=headers, **kwargs) as retry_resp:
-                        return await retry_resp.json()
-                return await resp.json()
+        async with self.session.request(method, url, headers=headers, **kwargs) as resp:
+            if resp.status == 401 and self.refresh_token:
+                await self.refresh()
+                headers = self._headers()
+                async with self.session.request(method, url, headers=headers, **kwargs) as retry_resp:
+                    return await retry_resp.json()
+            return await resp.json()
 
     async def login(self, telegram_id: int):
         self.telegram_id = telegram_id
         await self.init_redis()
+        await self.init_session()
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(f"{self.BASE_URL}auth/login/", json={"telegram_id": telegram_id}) as resp:
-                if resp.status == 404:
-                    await self._delete_tokens()
-                    raise ValueError("User not registered")
-                data = await resp.json()
-                self.access_token = data.get("access")
-                self.refresh_token = data.get("refresh")
-                await self._save_tokens()
-                return data
+        async with self.session.post(f"{self.BASE_URL}auth/login/", json={"telegram_id": telegram_id}) as resp:
+            if resp.status == 404:
+                await self._delete_tokens()
+                raise ValueError("User not registered")
+            data = await resp.json()
+            self.access_token = data.get("access")
+            self.refresh_token = data.get("refresh")
+            await self._save_tokens()
+            return data
 
     async def _auto_refresh(self):
         if self.access_token or not self.refresh_token:
@@ -178,21 +190,22 @@ class TSUAuth:
     async def refresh(self):
         if not self.refresh_token:
             raise ValueError("No refresh_token for refresh")
-        async with aiohttp.ClientSession() as session:
-            async with session.post(f"{self.BASE_URL}auth/refresh/", json={"refresh": self.refresh_token}) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    self.access_token = data.get("access")
-                    await self._save_tokens()
-                elif resp.status in (400, 404):
-                    await self.login(self.telegram_id)
-                else:
-                    raise ValueError(f"Error updating token: {resp.status}")
+        await self.init_session()
+        async with self.session.post(f"{self.BASE_URL}auth/refresh/", json={"refresh": self.refresh_token}) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                self.access_token = data.get("access")
+                await self._save_tokens()
+            elif resp.status in (400, 404):
+                await self.login(self.telegram_id)
+            else:
+                raise ValueError(f"Error updating token: {resp.status}")
 
     async def register(self, telegram_id: int, username: str, first_name: str = "",
                        last_name: str = "", phone_number: str = "", role: str = "student"):
         self.telegram_id = telegram_id
         await self.init_redis()
+        await self.init_session()
 
         payload = {
             "username": username,
@@ -203,20 +216,20 @@ class TSUAuth:
             "role": role
         }
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(f"{self.BASE_URL}auth/register/", json=payload) as resp:
-                if resp.status not in (200, 201):
-                    data = await resp.text()
-                    raise ValueError(f"Registration error: {data}")
-                data = await resp.json()
-                self.access_token = data.get("access")
-                self.refresh_token = data.get("refresh")
-                await self._save_tokens()
-                return data
+        async with self.session.post(f"{self.BASE_URL}auth/register/", json=payload) as resp:
+            if resp.status not in (200, 201):
+                data = await resp.text()
+                raise ValueError(f"Registration error: {data}")
+            data = await resp.json()
+            self.access_token = data.get("access")
+            self.refresh_token = data.get("refresh")
+            await self._save_tokens()
+            return data
 
     async def logout(self):
         if not self.refresh_token:
             return
-        async with aiohttp.ClientSession() as session:
-            await session.post(f"{self.BASE_URL}auth/logout/", json={"refresh": self.refresh_token})
+        await self.init_session()
+        async with self.session.post(f"{self.BASE_URL}auth/logout/", json={"refresh": self.refresh_token}):
+            pass
         await self._delete_tokens()

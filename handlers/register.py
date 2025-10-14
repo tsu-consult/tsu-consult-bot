@@ -15,8 +15,8 @@ from aiogram.types import (
 )
 
 from keyboards.main_keyboard import show_main_menu
-from services.auth_api import TSUAuth
-from states.auth import RegisterState
+from services.auth import auth
+from states.register_state import RegisterState
 from utils.messages import edit_step
 
 router = Router()
@@ -37,7 +37,6 @@ async def start_registration(event: Message | CallbackQuery, state: FSMContext):
         telegram_id = event.from_user.id
         message = event
 
-    auth = TSUAuth()
     if await auth.is_registered(telegram_id):
         role = await auth.get_role(telegram_id)
         await show_main_menu(message, role)
@@ -111,8 +110,6 @@ async def process_role_selection(callback: CallbackQuery, state: FSMContext):
     first_name = data["first_name"]
     last_name = data["last_name"]
     phone_number = data["phone_number"]
-
-    auth = TSUAuth()
 
     logger.info(
         "Register attempt: telegram_id=%s | username=%s | phone=%s | role=%s",
