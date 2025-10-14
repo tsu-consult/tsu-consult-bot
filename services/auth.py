@@ -61,21 +61,39 @@ class TSUAuth:
             logger.error(f"Redis error (load): {e}")
         return False
 
+    def _delete_tokens_from_redis(self):
+        if self.telegram_id:
+            try:
+                self.redis.delete(f"tsu_access:{self.telegram_id}")
+                self.redis.delete(f"tsu_refresh:{self.telegram_id}")
+                logger.info(f"Tokens deleted from Redis for telegram_id={self.telegram_id}")
+            except redis.RedisError as e:
+                logger.error(f"Redis error (delete): {e}")
+        self.access_token = None
+        self.refresh_token = None
+
     def is_registered(self, telegram_id: int) -> bool:
         self.telegram_id = telegram_id
         try:
             refresh_token = self.redis.get(f"tsu_refresh:{self.telegram_id}")
-            if refresh_token:
-                self.refresh_token = refresh_token
-                access_token = self.redis.get(f"tsu_access:{self.telegram_id}")
-                if not access_token:
-                    self.refresh()
-                else:
-                    self.access_token = access_token
+            access_token = self.redis.get(f"tsu_access:{self.telegram_id}")
+
+            if not refresh_token:
+                return False
+
+            self.refresh_token = refresh_token
+            self.access_token = access_token
+
+            try:
+                self._auto_refresh()
                 return True
+            except ValueError as e:
+                if "Пользователь удалён из системы" in str(e):
+                    self._delete_tokens_from_redis()
+                    return False
+                raise e
         except redis.RedisError:
-            pass
-        return False
+            return False
 
     def _auto_refresh(self):
         if not self.access_token and self.refresh_token:
@@ -203,6 +221,11 @@ class TSUAuth:
             response = requests.post(f"{self.BASE_URL}/auth/login/", json={"telegram_id": telegram_id}, timeout=10)
             logger.info("Login response: %s | %s", response.status_code, response.text)
 
+            if response.status_code == 404:
+                logger.warning(f"User {telegram_id} not found. Deleting tokens from Redis.")
+                self._delete_tokens_from_redis()
+                raise ValueError("Пользователь удалён из системы. Пожалуйста, зарегистрируйтесь заново.")
+
             if response.status_code != 200:
                 logger.error("Login failed: %s", response.text)
                 raise ValueError("Ошибка авторизации. Попробуйте снова.")
@@ -227,6 +250,11 @@ class TSUAuth:
         try:
             response = requests.post(f"{self.BASE_URL}/auth/refresh/", json={"refresh": self.refresh_token}, timeout=10)
             logger.info("Refresh response: %s | %s", response.status_code, response.text)
+
+            if response.status_code == 404:
+                logger.warning(f"User {self.telegram_id} not found during refresh. Deleting tokens from Redis.")
+                self._delete_tokens_from_redis()
+                raise ValueError("Пользователь удалён из системы. Пожалуйста, зарегистрируйтесь заново.")
 
             if response.status_code == 200:
                 data = response.json()

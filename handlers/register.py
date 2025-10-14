@@ -15,6 +15,7 @@ from aiogram.types import (
     ReplyKeyboardRemove
 )
 
+from keyboards.main import student_menu, teacher_menu
 from services.auth import TSUAuth
 from states.register import RegisterState
 from utils.messages import answer_and_delete, edit_step
@@ -142,6 +143,11 @@ async def process_role_selection(callback: types.CallbackQuery, state: FSMContex
             await asyncio.gather(*tasks)
         except (TelegramBadRequest, TelegramAPIError):
             pass
+
+        if role == "student":
+            await callback.message.answer("Вы вошли как студент 🎓", reply_markup=student_menu)
+        elif role == "teacher":
+            await callback.message.answer("Вы вошли как преподаватель 👨‍🏫", reply_markup=teacher_menu)
 
     else:
         await handle_registration_error(callback, state)
