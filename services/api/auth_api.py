@@ -1,7 +1,7 @@
 ﻿import logging
 import aiohttp
 import config
-from typing import Optional
+from typing import Optional, Tuple
 from redis import asyncio as aioredis
 
 logging.basicConfig(
@@ -101,6 +101,30 @@ class TSUAuth:
         except Exception as e:
             logger.warning(f"Failed to get role for {telegram_id}: {e}")
         return None
+
+    async def get_user_name(self, telegram_id: int) -> Tuple[str, str]:
+        self.telegram_id = telegram_id
+        await self.init_redis()
+        await self.init_session()
+
+        if not (self.access_token and self.refresh_token):
+            await self._load_tokens()
+
+        try:
+            response = await self.api_request("GET", "profile/")
+            first_name = response.get("first_name", "")
+            last_name = response.get("last_name", "")
+            return first_name, last_name
+        except aiohttp.ClientResponseError as e:
+            if e.status == 401:
+                await self._delete_tokens()
+            logger.warning(f"Failed to get user name for {telegram_id}: {e}")
+        except Exception as e:
+            logger.warning(f"Unexpected error while getting user name for {telegram_id}: {e}")
+
+        return "", ""
+
+
 
     async def api_request(self, method: str, endpoint: str, **kwargs):
         await self._auto_refresh()
