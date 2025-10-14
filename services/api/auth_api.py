@@ -23,7 +23,6 @@ class TSUAuth:
 
         self.access_ttl = getattr(config, "ACCESS_EXPIRES_IN", 300)
         self.refresh_ttl = getattr(config, "REFRESH_EXPIRES_IN", 86400)
-        self.role_ttl = 60
 
     async def init_redis(self):
         if self.redis is None:
@@ -77,7 +76,6 @@ class TSUAuth:
             try:
                 await self.redis.delete(f"tsu_access:{self.telegram_id}")
                 await self.redis.delete(f"tsu_refresh:{self.telegram_id}")
-                await self.redis.delete(f"tsu_role:{self.telegram_id}")
                 logger.info(f"Tokens deleted from Redis for telegram_id={self.telegram_id}")
             except Exception as e:
                 logger.error(f"Redis error (_delete_tokens): {e}")
@@ -89,13 +87,6 @@ class TSUAuth:
         await self.init_redis()
         await self.init_session()
 
-        try:
-            role = await self.redis.get(f"tsu_role:{telegram_id}")
-            if role:
-                return role
-        except aioredis.RedisError as e:
-            logger.warning(f"Redis error while getting role for {telegram_id}: {e}")
-
         if not (self.access_token and self.refresh_token):
             await self._load_tokens()
 
@@ -103,10 +94,6 @@ class TSUAuth:
             response = await self.api_request("GET", "profile/")
             role = response.get("role")
             if role in ("student", "teacher"):
-                try:
-                    await self.redis.setex(f"tsu_role:{telegram_id}", self.role_ttl, role)
-                except aioredis.RedisError as e:
-                    logger.warning(f"Redis error while saving role for {telegram_id}: {e}")
                 return role
         except aiohttp.ClientResponseError as e:
             if e.status == 401:

@@ -28,7 +28,6 @@ HOME_COMMANDS = [
 
 
 @router.message(F.text == "/register")
-@router.callback_query(lambda c: c.data == "start")
 async def start_registration(event: Message | CallbackQuery, state: FSMContext):
     if isinstance(event, types.CallbackQuery):
         telegram_id = event.from_user.id
