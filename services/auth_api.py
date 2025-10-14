@@ -121,7 +121,7 @@ class TSUAuth:
         except aioredis.RedisError as e:
             logger.warning(f"Redis error while getting role for {telegram_id}: {e}")
 
-        if not await self.ensure_logged_in(telegram_id):
+        if not (self.access_token and self.refresh_token) and not await self._load_tokens():
             return None
 
         try:
@@ -162,7 +162,7 @@ class TSUAuth:
             async with session.post(f"{self.BASE_URL}auth/login/", json={"telegram_id": telegram_id}) as resp:
                 if resp.status == 404:
                     await self._delete_tokens()
-                    raise ValueError("Пользователь не найден. Нужно зарегистрироваться.")
+                    raise ValueError("User not registered")
                 data = await resp.json()
                 self.access_token = data.get("access")
                 self.refresh_token = data.get("refresh")
@@ -177,7 +177,7 @@ class TSUAuth:
 
     async def refresh(self):
         if not self.refresh_token:
-            raise ValueError("Нет refresh_token для обновления")
+            raise ValueError("No refresh_token for refresh")
         async with aiohttp.ClientSession() as session:
             async with session.post(f"{self.BASE_URL}auth/refresh/", json={"refresh": self.refresh_token}) as resp:
                 if resp.status == 200:
@@ -187,7 +187,7 @@ class TSUAuth:
                 elif resp.status in (400, 404):
                     await self.login(self.telegram_id)
                 else:
-                    raise ValueError(f"Ошибка при обновлении токена: {resp.status}")
+                    raise ValueError(f"Error updating token: {resp.status}")
 
     async def register(self, telegram_id: int, username: str, first_name: str = "",
                        last_name: str = "", phone_number: str = "", role: str = "student"):
@@ -207,7 +207,7 @@ class TSUAuth:
             async with session.post(f"{self.BASE_URL}auth/register/", json=payload) as resp:
                 if resp.status not in (200, 201):
                     data = await resp.text()
-                    raise ValueError(f"Ошибка регистрации: {data}")
+                    raise ValueError(f"Registration error: {data}")
                 data = await resp.json()
                 self.access_token = data.get("access")
                 self.refresh_token = data.get("refresh")
