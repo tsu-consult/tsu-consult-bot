@@ -124,6 +124,23 @@ class TSUAuth:
 
         return "", ""
 
+    async def is_teacher_confirmed(self, telegram_id: int) -> bool:
+        self.telegram_id = telegram_id
+        await self.init_redis()
+        await self.init_session()
+
+        if not (self.access_token and self.refresh_token):
+            await self._load_tokens()
+
+        try:
+            profile = await self.api_request("GET", "profile/")
+            if profile.get("role") == "teacher":
+                return bool(profile.get("active", False))
+        except Exception as e:
+            logger.warning(f"Failed to check teacher confirmation for {telegram_id}: {e}")
+
+        return False
+
 
 
     async def api_request(self, method: str, endpoint: str, **kwargs):

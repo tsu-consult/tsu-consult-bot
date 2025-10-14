@@ -52,6 +52,15 @@ teacher_menu = types.InlineKeyboardMarkup(
     ]
 )
 
+teacher_unconfirmed_menu = types.InlineKeyboardMarkup(
+    inline_keyboard=[
+        [
+            types.InlineKeyboardButton(text="👤 Профиль", callback_data="menu_profile"),
+            types.InlineKeyboardButton(text="🚪 Выйти", callback_data="menu_logout")
+        ]
+    ]
+)
+
 guest_menu = types.InlineKeyboardMarkup(
     inline_keyboard=[
         [
@@ -66,11 +75,21 @@ async def show_main_menu(message: Message, role: str | None):
     first_name, last_name = await auth.get_user_name(telegram_id)
 
     if role == "student":
-        greeting = f"🎓 Добро пожаловать, {first_name} {last_name}"
+        greeting = f"🎓 Добро пожаловать, {first_name} {last_name}."
         await message.answer(greeting, reply_markup=student_menu)
     elif role == "teacher":
-        greeting = f"👨‍🏫 Добро пожаловать, {first_name} {last_name}"
-        await message.answer(greeting, reply_markup=teacher_menu)
+        is_confirmed = await auth.is_teacher_confirmed(telegram_id)
+        greeting = f"👨‍🏫 Добро пожаловать, {first_name} {last_name}."
+
+        if is_confirmed:
+            await message.answer(greeting, reply_markup=teacher_menu)
+        else:
+            await message.answer(
+                f"{greeting}\n\n⏳ Ваш аккаунт преподавателя ещё не подтверждён администратором.\n"
+                f"Пока доступны только основные функции.",
+                reply_markup=teacher_unconfirmed_menu
+            )
+
     else:
         await message.answer(
             "👋 Привет!\n\nЧтобы продолжить, зарегистрируйтесь или войдите в систему 👇",
