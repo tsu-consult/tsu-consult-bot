@@ -78,20 +78,32 @@ class TSUAuth:
             refresh_token = self.redis.get(f"tsu_refresh:{self.telegram_id}")
             access_token = self.redis.get(f"tsu_access:{self.telegram_id}")
 
-            if not refresh_token:
-                return False
-
             self.refresh_token = refresh_token
             self.access_token = access_token
 
-            try:
-                self._auto_refresh()
-                return True
-            except ValueError as e:
-                if "Пользователь удалён из системы" in str(e):
-                    self._delete_tokens_from_redis()
+            if not self.refresh_token:
+                try:
+                    login_data = self.login(telegram_id)
+                    if login_data:
+                        return True
+                except ValueError:
                     return False
-                raise e
+
+            if not self.access_token:
+                try:
+                    self._auto_refresh()
+                except ValueError as e:
+                    if "Пользователь удалён из системы" in str(e):
+                        self._delete_tokens_from_redis()
+                        return False
+                    try:
+                        login_data = self.login(telegram_id)
+                        if login_data:
+                            return True
+                    except ValueError:
+                        return False
+
+            return True
         except redis.RedisError:
             return False
 
@@ -165,7 +177,7 @@ class TSUAuth:
         return text.capitalize()
 
 
-
+    # Endpoints
     def api_request(self, method: str, endpoint: str, **kwargs):
         self._auto_refresh()
         url = f"{self.BASE_URL}{endpoint}"

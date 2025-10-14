@@ -15,10 +15,10 @@ from aiogram.types import (
     ReplyKeyboardRemove, BotCommand, BotCommandScopeChat, CallbackQuery
 )
 
-from keyboards.main import show_main_menu
-from services.auth import TSUAuth
-from states.register import RegisterState
-from utils.messages import answer_and_delete, edit_step
+from keyboards.main_keyboard import show_main_menu
+from services.auth_api import TSUAuth
+from states.auth import RegisterState
+from utils.messages import edit_step
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -40,7 +40,8 @@ async def start_registration(event: Message | CallbackQuery, state: FSMContext):
 
     auth = TSUAuth()
     if auth.is_registered(telegram_id):
-        await answer_and_delete(message, "✅ Вы уже зарегистрированы и авторизованы.")
+        role = auth.get_role(telegram_id)
+        await show_main_menu(message, role)
         return
 
     await state.update_data(
@@ -54,7 +55,7 @@ async def start_registration(event: Message | CallbackQuery, state: FSMContext):
     )
 
     await message.answer(
-        "Пожалуйста, поделитесь вашим контактом для регистрации:",
+        "Пожалуйста, поделитесь вашим контактом для регистрации 👇",
         reply_markup=keyboard
     )
     await state.set_state(RegisterState.waiting_for_contact)

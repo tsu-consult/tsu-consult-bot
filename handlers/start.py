@@ -4,8 +4,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
 
 from handlers import register
-from keyboards.main import guest_menu, show_main_menu
-from services.auth import TSUAuth
+from keyboards.main_keyboard import show_main_menu
+from services.auth_api import TSUAuth
 
 router = Router()
 
