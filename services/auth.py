@@ -167,11 +167,7 @@ class TSUAuth:
 
         logger.info("Refreshing access token for telegram_id=%s", self.telegram_id)
         try:
-            response = requests.post(
-                f"{self.BASE_URL}/auth/refresh/",
-                json={"refresh": self.refresh_token},
-                timeout=10
-            )
+            response = requests.post(f"{self.BASE_URL}/auth/refresh/", json={"refresh": self.refresh_token}, timeout=10)
             logger.info("Refresh response: %s | %s", response.status_code, response.text)
 
             if response.status_code == 200:
@@ -180,15 +176,19 @@ class TSUAuth:
                 self._save_tokens()
                 logger.info("Access token refreshed successfully")
                 return True
+            elif response.status_code in (400, 403):
+                logger.warning("Refresh token expired, attempting re-login for telegram_id=%s", self.telegram_id)
+                try:
+                    relog_data = self.login(self.telegram_id)
+                    if relog_data:
+                        logger.info("Re-login successful, tokens renewed automatically")
+                        return True
+                except Exception as relog_error:
+                    logger.error(f"Auto re-login failed: {relog_error}")
+                    raise ValueError("Не удалось обновить токен. Требуется повторная авторизация.")
             else:
-                logger.error("Refresh failed: %s", response.text)
-                if self.telegram_id:
-                    self.redis.delete(f"tsu_access:{self.telegram_id}")
-                    self.redis.delete(f"tsu_refresh:{self.telegram_id}")
-                self.access_token = None
-                self.refresh_token = None
-                raise ValueError("Ошибка обновления токена. Авторизуйтесь снова.")
-
+                logger.error("Unexpected refresh response: %s", response.text)
+                raise ValueError("Ошибка при обновлении токена.")
         except requests.exceptions.RequestException as e:
             logger.error("Network error during refresh: %s", e)
             raise ValueError("Ошибка соединения с сервером.")
@@ -212,7 +212,6 @@ class TSUAuth:
             else:
                 logger.error("Logout failed: %s", response.text)
                 raise ValueError("Ошибка при выходе из системы.")
-
         except requests.exceptions.RequestException as e:
             logger.error("Network error during logout: %s", e)
             raise ValueError("Ошибка соединения с сервером.")
