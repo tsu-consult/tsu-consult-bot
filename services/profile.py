@@ -100,5 +100,22 @@ class TSUProfile:
 
         return profile_text
 
+    @staticmethod
+    async def resubmit_teacher_request(telegram_id: int) -> bool:
+        try:
+            auth.telegram_id = telegram_id
+            await auth.init_redis()
+            await auth.init_session()
+            if not (auth.access_token and auth.refresh_token):
+                await auth.load_tokens_if_needed()
+
+            response = await auth.api_request("POST", "profile/approval/resubmit/")
+
+            return bool(response)
+        except Exception as e:
+            import logging
+            logging.error(f"Error resubmitting teacher request for telegram_id={telegram_id}: {e}")
+            return False
+
 
 profile = TSUProfile()

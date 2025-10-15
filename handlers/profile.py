@@ -1,4 +1,6 @@
-﻿from aiogram import Router, F
+﻿import logging
+
+from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
@@ -9,6 +11,7 @@ from utils.auth_utils import ensure_auth
 from utils.messages import answer_and_delete, delete_msg
 from utils.profile_utils import show_profile
 
+logger = logging.getLogger(__name__)
 router = Router()
 
 
@@ -49,6 +52,24 @@ async def edit_profile_name(message: Message, state: FSMContext):
     await state.update_data(status_msg_id=success_msg.message_id)
 
     await show_profile(message, telegram_id)
+
+
+@router.callback_query(F.data == "resubmit_teacher_request")
+async def resubmit_teacher_request(callback: CallbackQuery, state: FSMContext):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback, state)
+    if not role:
+        await callback.answer()
+        return
+
+    success = await profile.resubmit_teacher_request(telegram_id)
+
+    if success:
+        await callback.message.answer("Успешно ✅\n\nЗапрос на утверждение был отправлен повторно и ожидает подтверждения от администратора.")
+    else:
+        logger.warning(f"Failed to resubmit teacher request for telegram_id={telegram_id}")
+        await answer_and_delete(callback.message, "❌ Не удалось отправить заявку. Попробуйте позже.")
+    await callback.answer()
 
 
 @router.callback_query(F.data == "menu_back")
