@@ -1,9 +1,13 @@
-﻿from datetime import datetime
+﻿import asyncio
+import logging
+from datetime import datetime
 
 from aiogram import Router, F
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, Message
 
+from keyboards.main_keyboard import show_main_menu
 from keyboards.paginated_keyboard import build_paginated_keyboard
 from services.consultations import consultations
 from services.teachers import teachers
@@ -157,7 +161,10 @@ async def book_consultation_callback(callback: CallbackQuery, state: FSMContext)
 
     consultation_id = int(callback.data.split("_")[1])
 
-    await state.update_data(consultation_id=consultation_id)
+    await state.update_data(
+        role=role,
+        consultation_id=consultation_id
+    )
 
     await callback.message.answer(
         "✍️ Пожалуйста, напишите, с каким вопросом вы идёте на консультацию."
@@ -169,6 +176,7 @@ async def book_consultation_callback(callback: CallbackQuery, state: FSMContext)
 async def handle_consultation_request(message: Message, state: FSMContext):
     telegram_id = message.from_user.id
     user_data = await state.get_data()
+    role = user_data.get("role")
     consultation_id = user_data.get("consultation_id")
     request_text = message.text.strip()
 
@@ -176,12 +184,20 @@ async def handle_consultation_request(message: Message, state: FSMContext):
         await message.answer("❗ Пожалуйста, введите текст запроса.")
         return
 
-    success = await consultations.book_consultation(
-        telegram_id, consultation_id, request_text
-    )
+    result = await consultations.book_consultation(telegram_id, consultation_id, request_text)
 
-    if success:
+    if result == "success":
         await message.answer("✅ Вы успешно записались на консультацию!")
+    elif result == "conflict":
+        warning_msg = await message.answer("⚠️ Вы уже записаны на эту консультацию.")
+        await show_main_menu(message, role)
+        await asyncio.sleep(5)
+        try:
+            await warning_msg.delete()
+        except TelegramBadRequest:
+            pass
+        except Exception as e:
+            logging.warning(f"Unable to delete message {warning_msg}: {e}")
     else:
         await message.answer("❌ Не удалось записаться. Попробуйте позже.")
 
