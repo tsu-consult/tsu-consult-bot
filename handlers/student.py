@@ -1,10 +1,13 @@
 ﻿from datetime import datetime
 
 from aiogram import Router, F
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.fsm.context import FSMContext
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, Message
 
 from keyboards.paginated_keyboard import build_paginated_keyboard
+from services.consultations import consultations
 from services.teachers import teachers
+from states.book_consultation import BookConsultation
 from utils.auth_utils import ensure_auth
 
 router = Router()
@@ -79,6 +82,7 @@ async def paginate_schedule(callback: CallbackQuery):
     teacher_id, page = map(int, callback.data.split("_")[1:])
     await show_schedule_page(callback, telegram_id, teacher_id, page)
 
+
 @router.callback_query(F.data.regexp(r"subscribe_\d+"))
 async def subscribe_teacher(callback: CallbackQuery):
     telegram_id = callback.from_user.id
@@ -114,6 +118,76 @@ async def unsubscribe_teacher(callback: CallbackQuery):
         await callback.answer("❌ Не удалось отписаться. Попробуйте позже.", show_alert=True)
 
 
+@router.callback_query(F.data.regexp(r"choose_book_\d+_\d+"))
+async def choose_consultation(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if not role:
+        await callback.answer()
+        return
+
+    teacher_id, page = map(int, callback.data.split("_")[2:])
+    page_data = await teachers.get_teacher_schedule(telegram_id, teacher_id, page=page, page_size=PAGE_SIZE)
+
+    open_consultations = [c for c in page_data["results"] if not c["is_closed"]]
+    if not open_consultations:
+        await callback.answer("❌ На этой странице нет открытых консультаций.", show_alert=True)
+        return
+
+    keyboard_rows = [
+        [InlineKeyboardButton(text=f"{c['title']} ({c['date']})", callback_data=f"book_{c['id']}")]
+        for c in open_consultations
+    ]
+    keyboard_rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data=f"schedule_{teacher_id}_{page}")])
+    keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
+
+    await callback.message.edit_text(
+        "Выберите консультацию, на которую хотите записаться 👇",
+        reply_markup=keyboard
+    )
+    await callback.answer()
+
+@router.callback_query(F.data.regexp(r"book_\d+"))
+async def book_consultation_callback(callback: CallbackQuery, state: FSMContext):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if not role:
+        await callback.answer()
+        return
+
+    consultation_id = int(callback.data.split("_")[1])
+
+    await state.update_data(consultation_id=consultation_id)
+
+    await callback.message.answer(
+        "✍️ Пожалуйста, напишите, с каким вопросом вы идёте на консультацию."
+    )
+    await state.set_state(BookConsultation.waiting_for_request)
+    await callback.answer()
+
+@router.message(BookConsultation.waiting_for_request)
+async def handle_consultation_request(message: Message, state: FSMContext):
+    telegram_id = message.from_user.id
+    user_data = await state.get_data()
+    consultation_id = user_data.get("consultation_id")
+    request_text = message.text.strip()
+
+    if not request_text:
+        await message.answer("❗ Пожалуйста, введите текст запроса.")
+        return
+
+    success = await consultations.book_consultation(
+        telegram_id, consultation_id, request_text
+    )
+
+    if success:
+        await message.answer("✅ Вы успешно записались на консультацию!")
+    else:
+        await message.answer("❌ Не удалось записаться. Попробуйте позже.")
+
+    await state.clear()
+
+
 
 async def show_schedule_page(callback: CallbackQuery, telegram_id: int, teacher_id: int, page: int):
     page_data = await teachers.get_teacher_schedule(telegram_id, teacher_id, page=page, page_size=PAGE_SIZE)
@@ -138,6 +212,7 @@ async def show_schedule_page(callback: CallbackQuery, telegram_id: int, teacher_
         "Вы можете записаться на доступные консультации (✅) или следить за обновлениями.",
     ]
 
+    open_consultations = []
     for c in page_data["results"]:
         status_emoji = "✅" if not c["is_closed"] else "🔒"
         start_time = format_time(c["start_time"])
@@ -148,32 +223,30 @@ async def show_schedule_page(callback: CallbackQuery, telegram_id: int, teacher_
             f"👥 Мест: {c['max_students']}\n"
             f"📌 Статус: {'Открыта' if not c['is_closed'] else 'Закрыта'}"
         )
+        if not c["is_closed"]:
+            open_consultations.append(c)
 
     current_page = page_data["current_page"]
     total_pages = page_data["total_pages"]
 
+    keyboard_rows = []
     nav_row = []
     if current_page > 0:
         nav_row.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=f"schedule_{teacher_id}_{current_page - 1}"))
     if current_page < total_pages - 1:
         nav_row.append(InlineKeyboardButton(text="➡️ Вперёд", callback_data=f"schedule_{teacher_id}_{current_page + 1}"))
-
-    if is_subscribed:
-        subscribe_row = [
-            InlineKeyboardButton(text="🚫 Отписаться", callback_data=f"unsubscribe_{teacher_id}")
-        ]
-    else:
-        subscribe_row = [
-            InlineKeyboardButton(text="🔔 Подписаться", callback_data=f"subscribe_{teacher_id}")
-        ]
-
-    back_row = [InlineKeyboardButton(text="🔙 К преподавателям", callback_data="student_view_teachers")]
-
-    keyboard_rows = []
     if nav_row:
         keyboard_rows.append(nav_row)
-    keyboard_rows.append(subscribe_row)
-    keyboard_rows.append(back_row)
+
+    if open_consultations:
+        keyboard_rows.append([InlineKeyboardButton(text="✅ Записаться", callback_data=f"choose_book_{teacher_id}_{current_page}")])
+
+    if is_subscribed:
+        keyboard_rows.append([InlineKeyboardButton(text="🚫 Отписаться", callback_data=f"unsubscribe_{teacher_id}")])
+    else:
+        keyboard_rows.append([InlineKeyboardButton(text="🔔 Подписаться", callback_data=f"subscribe_{teacher_id}")])
+
+    keyboard_rows.append([InlineKeyboardButton(text="🔙 К преподавателям", callback_data="student_view_teachers")])
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
 
