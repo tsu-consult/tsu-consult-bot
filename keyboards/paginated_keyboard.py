@@ -1,15 +1,12 @@
 ﻿from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 
-def build_paginated_keyboard(
-    data_list: list,
-    page: int,
-    total_pages: int,
-    callback_prefix: str,
-    label_key: str = "username"
-) -> InlineKeyboardMarkup:
+def build_paginated_keyboard(data_list: list, page: int, total_pages: int, callback_prefix: str) -> InlineKeyboardMarkup:
     buttons = [
-        [InlineKeyboardButton(text=item[label_key], callback_data=f"{callback_prefix}_{item['id']}")]
+        [InlineKeyboardButton(
+            text=f"{item.get('first_name', '')} {item.get('last_name', '')}".strip(),
+            callback_data=f"{callback_prefix}_{item['id']}"
+        )]
         for item in data_list
     ]
 

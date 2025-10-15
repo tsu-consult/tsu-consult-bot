@@ -11,6 +11,7 @@ class TSUTeachers:
 
     @staticmethod
     async def get_teachers_page(page: int = 0, page_size: int = 10) -> dict:
+        await auth.init_redis()
         await auth.init_session()
         if not (auth.access_token and auth.refresh_token):
             await auth.load_tokens_if_needed()

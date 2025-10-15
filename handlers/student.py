@@ -8,16 +8,15 @@ router = Router()
 
 @router.callback_query(F.data == "student_view_teachers")
 async def show_teachers_first_page(callback: CallbackQuery):
-    page_data = await teachers.get_teachers_page(page=0, page_size=2)
+    page_data = await teachers.get_teachers_page(page=0, page_size=5)
     keyboard = build_paginated_keyboard(
         data_list=page_data["results"],
         page=page_data["current_page"],
         total_pages=page_data["total_pages"],
-        callback_prefix="teacher",
-        label_key="username"
+        callback_prefix="teacher"
     )
     await callback.message.edit_text(
-        "👨‍🏫 Список преподавателей",
+        "👨‍🏫 Преподаватели",
         reply_markup=keyboard
     )
     await callback.answer()
@@ -26,17 +25,16 @@ async def show_teachers_first_page(callback: CallbackQuery):
 @router.callback_query(F.data.regexp(r"teacher_page_\d+"))
 async def paginate_teachers(callback: CallbackQuery):
     page = int(callback.data.split("_")[-1])
-    page_data = await teachers.get_teachers_page(page=page, page_size=2)
+    page_data = await teachers.get_teachers_page(page=page, page_size=5)
 
     keyboard = build_paginated_keyboard(
         data_list=page_data["results"],
         page=page_data["current_page"],
         total_pages=page_data["total_pages"],
-        callback_prefix="teacher",
-        label_key="username"
+        callback_prefix="teacher"
     )
     await callback.message.edit_text(
-        "👨‍🏫 Список преподавателей",
+        "👨‍🏫 Преподаватели",
         reply_markup=keyboard
     )
     await callback.answer()
