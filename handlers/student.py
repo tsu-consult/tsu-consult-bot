@@ -1,11 +1,14 @@
-﻿from aiogram import Router, F
-from aiogram.types import CallbackQuery
+﻿from datetime import datetime
+
+from aiogram import Router, F
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
 from keyboards.paginated_keyboard import build_paginated_keyboard
 from services.teachers import teachers
 from utils.auth_utils import ensure_auth
 
 router = Router()
+PAGE_SIZE = 5
 
 @router.callback_query(F.data == "student_view_teachers")
 async def show_teachers_first_page(callback: CallbackQuery):
@@ -15,7 +18,7 @@ async def show_teachers_first_page(callback: CallbackQuery):
         await callback.answer()
         return
 
-    page_data = await teachers.get_teachers_page(callback.from_user.id, page=0, page_size=5)
+    page_data = await teachers.get_teachers_page(callback.from_user.id, page=0, page_size=PAGE_SIZE)
     keyboard = build_paginated_keyboard(
         data_list=page_data["results"],
         page=page_data["current_page"],
@@ -39,7 +42,7 @@ async def paginate_teachers(callback: CallbackQuery):
         return
 
     page = int(callback.data.split("_")[-1])
-    page_data = await teachers.get_teachers_page(callback.from_user.id, page=page, page_size=5)
+    page_data = await teachers.get_teachers_page(callback.from_user.id, page=page, page_size=PAGE_SIZE)
 
     keyboard = build_paginated_keyboard(
         data_list=page_data["results"],
@@ -64,20 +67,78 @@ async def show_teacher_schedule(callback: CallbackQuery):
         return
 
     teacher_id = int(callback.data.split("_")[1])
-    page_data = await teachers.get_teacher_schedule(callback.from_user.id, teacher_id, page=0, page_size=5)
+    await show_schedule_page(callback, telegram_id, teacher_id, 0)
+
+
+@router.callback_query(F.data.regexp(r"schedule_\d+_\d+"))
+async def paginate_schedule(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    teacher_id, page = map(int, callback.data.split("_")[1:])
+    await show_schedule_page(callback, telegram_id, teacher_id, page)
+
+
+async def show_schedule_page(callback: CallbackQuery, telegram_id: int, teacher_id: int, page: int):
+    page_data = await teachers.get_teacher_schedule(telegram_id, teacher_id, page=page, page_size=PAGE_SIZE)
 
     if not page_data["results"]:
         await callback.message.edit_text("📅 У этого преподавателя пока нет консультаций.")
         await callback.answer()
         return
 
-    text_lines = [f"📅 Расписание консультаций {page_data['results'][0]['teacher_name']}:\n"]
+    teacher_name = page_data["results"][0].get("teacher_name", "Преподаватель")
+
+    def format_time(t: str) -> str:
+        try:
+            return datetime.strptime(t, "%H:%M:%S").strftime("%H:%M")
+        except ValueError:
+            return t
+
+    text_lines = [
+        f"👨‍🏫 <b>Расписание консультаций — {teacher_name}</b>\n",
+        "Вы можете записаться на доступные консультации (✅) или следить за обновлениями.",
+    ]
+
     for c in page_data["results"]:
-        status_emoji = "❌" if c["is_closed"] else "✅"
+        status_emoji = "✅" if not c["is_closed"] else "🔒"
+        start_time = format_time(c["start_time"])
+        end_time = format_time(c["end_time"])
         text_lines.append(
-            f"{status_emoji} {c['title']} — {c['date']} {c['start_time']}–{c['end_time']} "
-            f"({c['max_students']} мест)"
+            f"\n<b>{status_emoji} {c['title']}</b>\n"
+            f"📅 {c['date']} | 🕒 {start_time}–{end_time}\n"
+            f"👥 Мест: {c['max_students']}\n"
+            f"📌 Статус: {'Открыта' if not c['is_closed'] else 'Закрыта'}"
         )
 
-    await callback.message.edit_text("\n".join(text_lines))
+    current_page = page_data["current_page"]
+    total_pages = page_data["total_pages"]
+
+    nav_row = []
+    if current_page > 0:
+        nav_row.append(InlineKeyboardButton(
+            text="⬅️ Назад",
+            callback_data=f"schedule_{teacher_id}_{current_page - 1}"
+        ))
+    if current_page < total_pages - 1:
+        nav_row.append(InlineKeyboardButton(
+            text="➡️ Вперёд",
+            callback_data=f"schedule_{teacher_id}_{current_page + 1}"
+        ))
+
+    back_row = [InlineKeyboardButton(
+        text="🔙 К преподавателям",
+        callback_data="student_view_teachers"
+    )]
+
+    keyboard_rows = []
+    if nav_row:
+        keyboard_rows.append(nav_row)
+    keyboard_rows.append(back_row)
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
+
+    await callback.message.edit_text(
+        "\n".join(text_lines),
+        reply_markup=keyboard,
+        parse_mode="HTML"
+    )
     await callback.answer()
