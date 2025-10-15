@@ -3,12 +3,19 @@ from aiogram.types import CallbackQuery
 
 from keyboards.paginated_keyboard import build_paginated_keyboard
 from services.teachers import teachers
+from utils.auth_utils import ensure_auth
 
 router = Router()
 
 @router.callback_query(F.data == "student_view_teachers")
 async def show_teachers_first_page(callback: CallbackQuery):
-    page_data = await teachers.get_teachers_page(page=0, page_size=5)
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if not role:
+        await callback.answer()
+        return
+
+    page_data = await teachers.get_teachers_page(callback.from_user.id, page=0, page_size=5)
     keyboard = build_paginated_keyboard(
         data_list=page_data["results"],
         page=page_data["current_page"],
@@ -16,7 +23,8 @@ async def show_teachers_first_page(callback: CallbackQuery):
         callback_prefix="teacher"
     )
     await callback.message.edit_text(
-        "👨‍🏫 Преподаватели",
+        "👨‍🏫 Преподаватели\n\n"
+        "Нажмите на преподавателя, чтобы посмотреть его расписание или подписаться/отписаться на уведомления о новых консультациях.",
         reply_markup=keyboard
     )
     await callback.answer()
@@ -24,8 +32,14 @@ async def show_teachers_first_page(callback: CallbackQuery):
 
 @router.callback_query(F.data.regexp(r"teacher_page_\d+"))
 async def paginate_teachers(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if not role:
+        await callback.answer()
+        return
+
     page = int(callback.data.split("_")[-1])
-    page_data = await teachers.get_teachers_page(page=page, page_size=5)
+    page_data = await teachers.get_teachers_page(callback.from_user.id, page=page, page_size=5)
 
     keyboard = build_paginated_keyboard(
         data_list=page_data["results"],
@@ -34,7 +48,8 @@ async def paginate_teachers(callback: CallbackQuery):
         callback_prefix="teacher"
     )
     await callback.message.edit_text(
-        "👨‍🏫 Преподаватели",
+        "👨‍🏫 Преподаватели\n\n"
+        "Нажмите на преподавателя, чтобы посмотреть его расписание или подписаться/отписаться на уведомления о новых консультациях.",
         reply_markup=keyboard
     )
     await callback.answer()

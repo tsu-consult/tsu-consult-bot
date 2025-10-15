@@ -10,7 +10,8 @@ class TSUTeachers:
     BASE_URL = config.API_URL
 
     @staticmethod
-    async def get_teachers_page(page: int = 0, page_size: int = 10) -> dict:
+    async def get_teachers_page(telegram_id: int, page: int = 0, page_size: int = 10) -> dict:
+        auth.telegram_id = telegram_id
         await auth.init_redis()
         await auth.init_session()
         if not (auth.access_token and auth.refresh_token):
