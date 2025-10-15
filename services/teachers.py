@@ -64,5 +64,34 @@ class TSUTeachers:
                 "total_pages": 1
             }
 
+    @staticmethod
+    async def subscribe_teacher(telegram_id: int, teacher_id: int) -> bool:
+        auth.telegram_id = telegram_id
+        await auth.init_redis()
+        await auth.init_session()
+        if not (auth.access_token and auth.refresh_token):
+            await auth.load_tokens_if_needed()
+        try:
+            response = await auth.api_request("POST", f"teachers/{teacher_id}/subscribe/")
+            print(response)
+            return bool(response)
+        except Exception as e:
+            logger.error(f"Error subscribing to teacher {teacher_id}: {e}")
+            return False
+
+    @staticmethod
+    async def unsubscribe_teacher(telegram_id: int, teacher_id: int) -> bool:
+        auth.telegram_id = telegram_id
+        await auth.init_redis()
+        await auth.init_session()
+        if not (auth.access_token and auth.refresh_token):
+            await auth.load_tokens_if_needed()
+        try:
+            await auth.api_request("DELETE", f"teachers/{teacher_id}/unsubscribe/")
+            return True
+        except Exception as e:
+            logger.error(f"Error unsubscribing from teacher {teacher_id}: {e}")
+            return False
+
 
 teachers = TSUTeachers()
