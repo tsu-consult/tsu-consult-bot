@@ -79,6 +79,11 @@ class TSUAuth:
             logger.error(f"Redis error (_load_tokens): {e}")
         return False
 
+    async def load_tokens_if_needed(self) -> bool:
+        if self.access_token and self.refresh_token:
+            return True
+        return await self._load_tokens()
+
     async def _delete_tokens(self):
         if self.redis_tokens and self.telegram_id:
             try:
@@ -145,23 +150,6 @@ class TSUAuth:
             logger.warning(f"Unexpected error while getting user name for {telegram_id}: {e}")
 
         return "", ""
-
-    async def get_teacher_status(self, telegram_id: int) -> str | None:
-        self.telegram_id = telegram_id
-        await self.init_redis()
-        await self.init_session()
-
-        if not (self.access_token and self.refresh_token):
-            await self._load_tokens()
-
-        try:
-            profile = await self.api_request("GET", "profile/")
-            if profile.get("role") == "teacher":
-                return profile.get("status")
-        except Exception as e:
-            logger.warning(f"Failed to get teacher status for {telegram_id}: {e}")
-
-        return None
 
 
 
