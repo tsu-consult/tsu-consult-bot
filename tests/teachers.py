@@ -1,5 +1,8 @@
 ﻿import asyncio
 import aiohttp
+import random
+from datetime import datetime, timedelta
+
 
 teachers = [
     {"username": "@teacher1", "telegram_id": 1000001, "phone_number": "9120000001", "first_name": "Алексей", "last_name": "Иванов", "role": "teacher", "password": "Test1234"},
@@ -24,27 +27,64 @@ teachers = [
     {"username": "@teacher20", "telegram_id": 1000020, "phone_number": "9120000020", "first_name": "Людмила", "last_name": "Соловьёва", "role": "teacher", "password": "Test1234"}
 ]
 
-API_URL = "https://api.tsu-consult.orexi4.ru/auth/register/"
+REGISTER_URL = "https://api.tsu-consult.orexi4.ru/auth/register/"
+LOGIN_URL = "https://api.tsu-consult.orexi4.ru/auth/login/"
+CONSULTATIONS_URL = "https://api.tsu-consult.orexi4.ru/consultations/"
 
 async def register_teacher(session, teacher):
-    try:
-        async with session.post(API_URL, json=teacher) as response:
-            text = await response.text()
-            if response.status < 300:
-                data = await response.json()
-                print(f"✅ Успешно зарегистрирован: {teacher['username']}")
-                print(f"   Access token: {data.get('access')}")
-                return data
-            else:
-                print(f"❌ Ошибка при регистрации {teacher['username']}: {response.status} - {text}")
-    except Exception as e:
-        print(f"❌ Исключение для {teacher['username']}: {e}")
+    async with session.post(REGISTER_URL, json=teacher) as response:
+        data = await response.json()
+        if response.status < 300:
+            print(f"✅ Зарегистрирован: {teacher['username']}")
+        else:
+            print(f"⚠ {teacher['username']} возможно уже зарегистрирован: {data}")
 
+async def login_teacher(session, teacher):
+    payload = {"telegram_id": teacher["telegram_id"]}
+    async with session.post(LOGIN_URL, json=payload) as response:
+        data = await response.json()
+        if response.status < 300 and "access" in data:
+            print(f"🔑 Вошёл в систему: {teacher['username']}")
+            return data["access"]
+        else:
+            print(f"❌ Не удалось войти {teacher['username']}: {data}")
+            return None
+
+def random_time():
+    start_hour = random.randint(9, 16)
+    duration = random.choice([1, 2])
+    end_hour = start_hour + duration
+    return f"{start_hour:02d}:00", f"{end_hour:02d}:00"
+
+async def create_consultation(session, token, teacher_username, index):
+    headers = {"Authorization": f"Bearer {token}"}
+    random_days = random.randint(0, 30)
+    date_str = (datetime.today() + timedelta(days=random_days)).strftime("%Y-%m-%d")
+    start_time, end_time = random_time()
+
+    consultation_data = {
+        "title": f"Консультация {teacher_username} #{index+1}",
+        "date": date_str,
+        "start_time": start_time,
+        "end_time": end_time,
+        "max_students": random.randint(5, 20)
+    }
+
+    async with session.post(CONSULTATIONS_URL, json=consultation_data, headers=headers) as response:
+        data = await response.json()
+        if response.status < 300:
+            print(f"🗓 Консультация создана для {teacher_username}: {consultation_data['title']} ({date_str} {start_time}-{end_time})")
+        else:
+            print(f"❌ Ошибка создания консультации для {teacher_username}: {response.status} - {data}")
 
 async def main():
     async with aiohttp.ClientSession() as session:
-        tasks = [register_teacher(session, t) for t in teachers]
-        await asyncio.gather(*tasks)
+        for teacher in teachers:
+            token = await login_teacher(session, teacher)
+            if token:
+                num_consults = random.randint(1, 5)  # 1–5 консультаций
+                tasks = [create_consultation(session, token, teacher['username'], i) for i in range(num_consults)]
+                await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
     asyncio.run(main())

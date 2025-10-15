@@ -10,10 +10,6 @@ student_menu = types.InlineKeyboardMarkup(
             types.InlineKeyboardButton(text="👨‍🏫 Список преподавателей", callback_data="student_view_teachers")
         ],
         [
-            types.InlineKeyboardButton(text="🗓️ Просмотр консультаций преподавателей",
-                                       callback_data="student_view_consultations")
-        ],
-        [
             types.InlineKeyboardButton(text="✏️ Записаться на консультацию", callback_data="student_book_consultation"),
             types.InlineKeyboardButton(text="❌ Отменить запись", callback_data="student_cancel_booking")
         ],
