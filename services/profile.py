@@ -34,6 +34,31 @@ class TSUProfile:
             logger.error(f"Error obtaining teacher status: {e}")
         return None
 
+    @staticmethod
+    async def update_profile(telegram_id: int, first_name: str, last_name: str) -> bool:
+        try:
+            auth.telegram_id = telegram_id
+            await auth.init_redis()
+            await auth.init_session()
+
+            if not (auth.access_token and auth.refresh_token):
+                await auth.load_tokens_if_needed()
+
+            payload = {
+                "first_name": first_name,
+                "last_name": last_name
+            }
+            response = await auth.api_request("PUT", "profile/", json=payload)
+
+            if response and response.get("first_name") == first_name and response.get("last_name") == last_name:
+                logger.info(f"First and last name successfully updated for telegram_id={telegram_id}")
+                return True
+            else:
+                logger.warning(f"Error updating name for telegram_id={telegram_id}: {response}")
+        except Exception as e:
+            logger.error(f"Error updating name for telegram_id={telegram_id}: {e}")
+        return False
+
     async def format_profile_text(self, telegram_id: int) -> str:
         user_data = await self.get_profile(telegram_id)
         if not user_data:

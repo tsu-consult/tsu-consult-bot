@@ -1,21 +1,23 @@
 ﻿import asyncio
 import logging
 
-from aiogram import types
+from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
-from aiogram.types import InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardMarkup, Message
 
 from config import PARSE_MODE
 
 
-async def delete_msg(message: types.Message):
+async def delete_msg(bot: Bot, chat_id: int, message_id: int | None):
+    if not message_id:
+        return
     try:
-        await message.delete()
-    except TelegramBadRequest:
+        await bot.delete_message(chat_id=chat_id, message_id=message_id)
+    except Exception:
         pass
 
-async def answer_and_delete(message: types.Message, text: str, delay: int = 5):
+async def answer_and_delete(message: Message, text: str, delay: int = 5):
     msg = await message.answer(text, parse_mode=PARSE_MODE)
     await asyncio.sleep(delay)
     try:
@@ -23,13 +25,8 @@ async def answer_and_delete(message: types.Message, text: str, delay: int = 5):
     except TelegramBadRequest:
         pass
 
-async def edit_step(
-    message: types.Message,
-    state: FSMContext,
-    text: str,
-    keyboard: InlineKeyboardMarkup | None = None,
-    msg_id_key: str = "register_msg_id"
-):
+async def edit_step(message: Message, state: FSMContext, text: str,
+                    keyboard: InlineKeyboardMarkup | None = None, msg_id_key: str = "register_msg_id"):
     data = await state.get_data()
     msg_id = data.get(msg_id_key)
 
