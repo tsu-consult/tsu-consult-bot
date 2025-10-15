@@ -1,7 +1,7 @@
 from aiogram import types
 from aiogram.types import Message
 
-from services.api.profile_api import profile
+from services.profile import profile
 from services.auth import auth
 
 student_menu = types.InlineKeyboardMarkup(

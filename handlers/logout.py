@@ -41,3 +41,5 @@ async def logout_callback(event: Message | CallbackQuery, state: FSMContext):
         "Вы успешно вышли из аккаунта 👋",
         reply_markup=guest_menu
     )
+
+    await event.answer()
