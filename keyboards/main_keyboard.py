@@ -7,6 +7,9 @@ from services.auth import auth
 student_menu = types.InlineKeyboardMarkup(
     inline_keyboard=[
         [
+            types.InlineKeyboardButton(text="👨‍🏫 Список преподавателей", callback_data="student_view_teachers")
+        ],
+        [
             types.InlineKeyboardButton(text="🗓️ Просмотр консультаций преподавателей",
                                        callback_data="student_view_consultations")
         ],

@@ -16,7 +16,7 @@ router = Router()
 
 
 @router.callback_query(F.data == "menu_profile")
-async def menu_profile_handler(callback: CallbackQuery, state: FSMContext):
+async def menu_profile_handler(callback: CallbackQuery):
     telegram_id = callback.from_user.id
     role = await ensure_auth(telegram_id, callback)
     if not role:
@@ -55,7 +55,7 @@ async def edit_profile_name(message: Message, state: FSMContext):
 
 
 @router.callback_query(F.data == "resubmit_teacher_request")
-async def resubmit_teacher_request(callback: CallbackQuery, state: FSMContext):
+async def resubmit_teacher_request(callback: CallbackQuery):
     telegram_id = callback.from_user.id
     role = await ensure_auth(telegram_id, callback)
     if not role:
