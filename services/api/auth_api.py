@@ -124,7 +124,7 @@ class TSUAuth:
 
         return "", ""
 
-    async def is_teacher_confirmed(self, telegram_id: int) -> bool:
+    async def get_teacher_status(self, telegram_id: int) -> str | None:
         self.telegram_id = telegram_id
         await self.init_redis()
         await self.init_session()
@@ -135,11 +135,11 @@ class TSUAuth:
         try:
             profile = await self.api_request("GET", "profile/")
             if profile.get("role") == "teacher":
-                return bool(profile.get("active", False))
+                return profile.get("status")
         except Exception as e:
-            logger.warning(f"Failed to check teacher confirmation for {telegram_id}: {e}")
+            logger.warning(f"Failed to get teacher status for {telegram_id}: {e}")
 
-        return False
+        return None
 
 
 

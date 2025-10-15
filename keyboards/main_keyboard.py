@@ -78,14 +78,20 @@ async def show_main_menu(message: Message, role: str | None):
         greeting = f"🎓 Добро пожаловать, {first_name} {last_name}."
         await message.answer(greeting, reply_markup=student_menu)
     elif role == "teacher":
-        is_confirmed = await auth.is_teacher_confirmed(telegram_id)
+        status = await auth.get_teacher_status(telegram_id)
         greeting = f"👨‍🏫 Добро пожаловать, {first_name} {last_name}."
 
-        if is_confirmed:
+        if status == "active":
             await message.answer(greeting, reply_markup=teacher_menu)
+        elif status == "pending":
+            await message.answer(
+                f"{greeting}\n\n⏳ Ваш аккаунт преподавателя находится на рассмотрении администратора.\n"
+                f"Пока доступны только основные функции.",
+                reply_markup=teacher_unconfirmed_menu
+            )
         else:
             await message.answer(
-                f"{greeting}\n\n⏳ Ваш аккаунт преподавателя ещё не подтверждён администратором.\n"
+                f"{greeting}\n\n❌ Ваша заявка на аккаунт преподавателя была отклонена.\n"
                 f"Пока доступны только основные функции.",
                 reply_markup=teacher_unconfirmed_menu
             )
