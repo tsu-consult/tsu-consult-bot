@@ -26,7 +26,7 @@ async def logout_callback(event: Message | CallbackQuery, state: FSMContext):
 
     logger.info("Logout attempt: telegram_id=%s", telegram_id)
 
-    await auth.logout()
+    await auth.logout(telegram_id)
     await state.clear()
     await message.delete()
 
@@ -41,3 +41,5 @@ async def logout_callback(event: Message | CallbackQuery, state: FSMContext):
         "Вы успешно вышли из аккаунта 👋",
         reply_markup=guest_menu
     )
+
+    await event.answer()

@@ -148,6 +148,7 @@ async def process_role_selection(callback: CallbackQuery, state: FSMContext):
             pass
 
         await show_main_menu(callback.message, role)
+        await callback.answer()
 
     else:
         await handle_registration_error(callback, state)

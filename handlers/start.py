@@ -12,15 +12,11 @@ router = Router()
 
 @router.message(Command("start"))
 async def cmd_start(message: Message):
-    telegram_id = message.from_user.id
-
-    role = await auth.get_role(telegram_id)
-    await show_main_menu(message, role)
+    await show_main_menu(message, role=None)
 
 @router.callback_query(lambda c: c.data == "start")
 async def start_register_callback(callback: CallbackQuery, state: FSMContext):
     telegram_id = callback.from_user.id
-    await callback.message.delete()
 
     role = await auth.get_role(telegram_id)
 
