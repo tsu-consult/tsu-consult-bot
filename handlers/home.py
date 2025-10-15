@@ -10,8 +10,8 @@ router = Router()
 
 
 @router.message(Command("home"))
-async def cmd_home(message: Message, state: FSMContext):
+async def cmd_home(message: Message):
     telegram_id = message.from_user.id
-    role = await ensure_auth(telegram_id, message, state)
+    role = await ensure_auth(telegram_id, message)
     if role:
         await show_main_menu(message, role)
