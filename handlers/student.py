@@ -146,7 +146,9 @@ async def choose_consultation(callback: CallbackQuery):
     keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
 
     await callback.message.edit_text(
-        "Выберите консультацию, на которую хотите записаться 👇",
+        "Выберите консультацию, на которую хотите записаться 👇\n\n"
+        "Если нужной консультации нет на этой странице — "
+        "перейдите на другую страницу расписания с помощью кнопкок ⬅️ Назад / ➡️ Вперёд.",
         reply_markup=keyboard
     )
     await callback.answer()
@@ -166,7 +168,7 @@ async def book_consultation_callback(callback: CallbackQuery, state: FSMContext)
         consultation_id=consultation_id
     )
 
-    await callback.message.answer(
+    await callback.message.edit_text(
         "✍️ Пожалуйста, напишите, с каким вопросом вы идёте на консультацию."
     )
     await state.set_state(BookConsultation.waiting_for_request)
@@ -178,12 +180,12 @@ async def handle_consultation_request(message: Message, state: FSMContext):
     user_data = await state.get_data()
     role = user_data.get("role")
     consultation_id = user_data.get("consultation_id")
-    request_text = message.text.strip()
 
-    if not request_text:
+    if not message.text or not message.text.strip():
         await message.answer("❗ Пожалуйста, введите текст запроса.")
         return
 
+    request_text = message.text.strip()
     result = await consultations.book_consultation(telegram_id, consultation_id, request_text)
 
     if result == "success":
@@ -191,7 +193,7 @@ async def handle_consultation_request(message: Message, state: FSMContext):
     elif result == "conflict":
         warning_msg = await message.answer("⚠️ Вы уже записаны на эту консультацию.")
         await show_main_menu(message, role)
-        await asyncio.sleep(5)
+        await asyncio.sleep(10)
         try:
             await warning_msg.delete()
         except TelegramBadRequest:
@@ -246,6 +248,7 @@ async def show_schedule_page(callback: CallbackQuery, telegram_id: int, teacher_
     total_pages = page_data["total_pages"]
 
     keyboard_rows = []
+
     nav_row = []
     if current_page > 0:
         nav_row.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=f"schedule_{teacher_id}_{current_page - 1}"))
@@ -254,15 +257,30 @@ async def show_schedule_page(callback: CallbackQuery, telegram_id: int, teacher_
     if nav_row:
         keyboard_rows.append(nav_row)
 
+    action_row = []
     if open_consultations:
-        keyboard_rows.append([InlineKeyboardButton(text="✅ Записаться", callback_data=f"choose_book_{teacher_id}_{current_page}")])
+        action_row.append(InlineKeyboardButton(
+            text="✅ Записаться",
+            callback_data=f"choose_book_{teacher_id}_{current_page}"
+        ))
 
     if is_subscribed:
-        keyboard_rows.append([InlineKeyboardButton(text="🚫 Отписаться", callback_data=f"unsubscribe_{teacher_id}")])
+        action_row.append(InlineKeyboardButton(
+            text="🚫 Отписаться",
+            callback_data=f"unsubscribe_{teacher_id}"
+        ))
     else:
-        keyboard_rows.append([InlineKeyboardButton(text="🔔 Подписаться", callback_data=f"subscribe_{teacher_id}")])
+        action_row.append(InlineKeyboardButton(
+            text="🔔 Подписаться",
+            callback_data=f"subscribe_{teacher_id}"
+        ))
 
-    keyboard_rows.append([InlineKeyboardButton(text="🔙 К преподавателям", callback_data="student_view_teachers")])
+    if action_row:
+        keyboard_rows.append(action_row)
+
+    keyboard_rows.append([
+        InlineKeyboardButton(text="🔙 К преподавателям", callback_data="student_view_teachers")
+    ])
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
 
