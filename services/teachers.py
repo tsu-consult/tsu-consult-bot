@@ -71,10 +71,10 @@ class TSUTeachers:
         await auth.init_session()
         if not (auth.access_token and auth.refresh_token):
             await auth.load_tokens_if_needed()
+
         try:
-            response = await auth.api_request("POST", f"teachers/{teacher_id}/subscribe/")
-            print(response)
-            return bool(response)
+            await auth.api_request("POST", f"teachers/{teacher_id}/subscribe/")
+            return True
         except Exception as e:
             logger.error(f"Error subscribing to teacher {teacher_id}: {e}")
             return False
@@ -86,12 +86,28 @@ class TSUTeachers:
         await auth.init_session()
         if not (auth.access_token and auth.refresh_token):
             await auth.load_tokens_if_needed()
+
         try:
             await auth.api_request("DELETE", f"teachers/{teacher_id}/unsubscribe/")
             return True
         except Exception as e:
-            logger.error(f"Error unsubscribing from teacher {teacher_id}: {e}")
+            logger.error(f"Error unsubscribing from teacher_id={teacher_id}: {e}")
             return False
+
+    @staticmethod
+    async def get_subscribed_teachers(telegram_id: int) -> list:
+        auth.telegram_id = telegram_id
+        await auth.init_redis()
+        await auth.init_session()
+        if not (auth.access_token and auth.refresh_token):
+            await auth.load_tokens_if_needed()
+
+        try:
+            response = await auth.api_request("GET", "teachers/subscribed/")
+            return response.get("results", []) if response else []
+        except Exception as e:
+            logger.error(f"Error fetching subscribed teachers: {e}")
+            return []
 
 
 teachers = TSUTeachers()

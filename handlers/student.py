@@ -92,6 +92,7 @@ async def subscribe_teacher(callback: CallbackQuery):
     success = await teachers.subscribe_teacher(telegram_id, teacher_id)
     if success:
         await callback.answer("✅ Вы подписались на обновления преподавателя!", show_alert=True)
+        await show_schedule_page(callback, telegram_id, teacher_id, 0)
     else:
         await callback.answer("❌ Не удалось подписаться. Попробуйте позже.", show_alert=True)
 
@@ -108,6 +109,7 @@ async def unsubscribe_teacher(callback: CallbackQuery):
     success = await teachers.unsubscribe_teacher(telegram_id, teacher_id)
     if success:
         await callback.answer("🚫 Подписка отменена.", show_alert=True)
+        await show_schedule_page(callback, telegram_id, teacher_id, 0)
     else:
         await callback.answer("❌ Не удалось отписаться. Попробуйте позже.", show_alert=True)
 
@@ -115,6 +117,8 @@ async def unsubscribe_teacher(callback: CallbackQuery):
 
 async def show_schedule_page(callback: CallbackQuery, telegram_id: int, teacher_id: int, page: int):
     page_data = await teachers.get_teacher_schedule(telegram_id, teacher_id, page=page, page_size=PAGE_SIZE)
+    subscribed_teachers = await teachers.get_subscribed_teachers(telegram_id)
+    is_subscribed = any(t["id"] == teacher_id for t in subscribed_teachers)
 
     if not page_data["results"]:
         await callback.message.edit_text("📅 У этого преподавателя пока нет консультаций.")
@@ -131,7 +135,7 @@ async def show_schedule_page(callback: CallbackQuery, telegram_id: int, teacher_
 
     text_lines = [
         f"👨‍🏫 <b>Расписание консультаций — {teacher_name}</b>\n",
-        "Вы можете записаться на доступные консультации (✅) или следить за обновлениями."
+        "Вы можете записаться на доступные консультации (✅) или следить за обновлениями.",
     ]
 
     for c in page_data["results"]:
@@ -154,9 +158,14 @@ async def show_schedule_page(callback: CallbackQuery, telegram_id: int, teacher_
     if current_page < total_pages - 1:
         nav_row.append(InlineKeyboardButton(text="➡️ Вперёд", callback_data=f"schedule_{teacher_id}_{current_page + 1}"))
 
-    subscribe_row = [
-        InlineKeyboardButton(text="🔔 Подписаться", callback_data=f"subscribe_{teacher_id}")
-    ]
+    if is_subscribed:
+        subscribe_row = [
+            InlineKeyboardButton(text="🚫 Отписаться", callback_data=f"unsubscribe_{teacher_id}")
+        ]
+    else:
+        subscribe_row = [
+            InlineKeyboardButton(text="🔔 Подписаться", callback_data=f"subscribe_{teacher_id}")
+        ]
 
     back_row = [InlineKeyboardButton(text="🔙 К преподавателям", callback_data="student_view_teachers")]
 
