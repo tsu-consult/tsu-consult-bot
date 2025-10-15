@@ -15,7 +15,8 @@ class TSUAuth:
     BASE_URL = config.API_URL
 
     def __init__(self):
-        self.redis: Optional[aioredis.Redis] = None
+        self.redis_tokens: Optional[aioredis.Redis] = None
+        self.redis_flags: Optional[aioredis.Redis] = None
         self.session: Optional[aiohttp.ClientSession] = None
         self.access_token: Optional[str] = None
         self.refresh_token: Optional[str] = None
@@ -25,9 +26,14 @@ class TSUAuth:
         self.refresh_ttl = getattr(config, "REFRESH_EXPIRES_IN", 86400)
 
     async def init_redis(self):
-        if self.redis is None:
-            self.redis = aioredis.from_url(
+        if self.redis_tokens is None:
+            self.redis_tokens = aioredis.from_url(
                 f"redis://{config.REDIS_HOST}:{config.REDIS_PORT}/{config.REDIS_DB}",
+                decode_responses=True
+            )
+        if self.redis_flags is None:
+            self.redis_flags = aioredis.from_url(
+                f"redis://{config.REDIS_HOST}:{config.REDIS_PORT}/{config.REDIS_DB + 1}",
                 decode_responses=True
             )
 
@@ -47,40 +53,56 @@ class TSUAuth:
         return headers
 
     async def _save_tokens(self):
-        if not self.redis or not self.telegram_id or not self.access_token or not self.refresh_token:
+        if not self.redis_tokens or not self.telegram_id or not self.access_token or not self.refresh_token:
             return
         try:
-            await self.redis.setex(f"tsu_access:{self.telegram_id}", self.access_ttl, self.access_token)
-            await self.redis.setex(f"tsu_refresh:{self.telegram_id}", self.refresh_ttl, self.refresh_token)
+            await self.redis_tokens.setex(f"tsu_access:{self.telegram_id}", self.access_ttl, self.access_token)
+            await self.redis_tokens.setex(f"tsu_refresh:{self.telegram_id}", self.refresh_ttl, self.refresh_token)
             logger.info(f"Tokens saved for telegram_id={self.telegram_id}")
+            await self.set_login_flag(self.telegram_id, True)
         except Exception as e:
             logger.error(f"Redis error (_save_tokens): {e}")
 
     async def _load_tokens(self) -> bool:
-        if not self.redis or not self.telegram_id:
+        if not self.redis_tokens or not self.telegram_id:
             return False
         try:
-            access_token = await self.redis.get(f"tsu_access:{self.telegram_id}")
-            refresh_token = await self.redis.get(f"tsu_refresh:{self.telegram_id}")
+            access_token = await self.redis_tokens.get(f"tsu_access:{self.telegram_id}")
+            refresh_token = await self.redis_tokens.get(f"tsu_refresh:{self.telegram_id}")
             if access_token and refresh_token:
                 self.access_token = access_token
                 self.refresh_token = refresh_token
                 logger.info(f"Tokens loaded for telegram_id={self.telegram_id}")
+                await self.set_login_flag(self.telegram_id, True)
                 return True
         except Exception as e:
             logger.error(f"Redis error (_load_tokens): {e}")
         return False
 
     async def _delete_tokens(self):
-        if self.redis and self.telegram_id:
+        if self.redis_tokens and self.telegram_id:
             try:
-                await self.redis.delete(f"tsu_access:{self.telegram_id}")
-                await self.redis.delete(f"tsu_refresh:{self.telegram_id}")
+                await self.redis_tokens.delete(f"tsu_access:{self.telegram_id}")
+                await self.redis_tokens.delete(f"tsu_refresh:{self.telegram_id}")
                 logger.info(f"Tokens deleted from Redis for telegram_id={self.telegram_id}")
+                await self.clear_login_flag(self.telegram_id)
             except Exception as e:
                 logger.error(f"Redis error (_delete_tokens): {e}")
         self.access_token = None
         self.refresh_token = None
+
+    async def set_login_flag(self, telegram_id: int, value: bool):
+        await self.init_redis()
+        try:
+            if value:
+                await self.redis_flags.set(f"logged_in:{telegram_id}", "1")
+            else:
+                await self.redis_flags.set(f"logged_in:{telegram_id}", "0")
+        except Exception as e:
+            logger.error(f"Redis error (set_login_flag): {e}")
+
+    async def clear_login_flag(self, telegram_id: int):
+        await self.set_login_flag(telegram_id, False)
 
     async def get_role(self, telegram_id: int) -> Optional[str]:
         self.telegram_id = telegram_id
@@ -219,7 +241,10 @@ class TSUAuth:
             await self._save_tokens()
             return data
 
-    async def logout(self):
+    async def logout(self, telegram_id: int | None = None):
+        if telegram_id:
+            self.telegram_id = telegram_id
+
         if not self.refresh_token:
             return
         await self.init_session()
