@@ -36,6 +36,6 @@ async def start_register_callback(callback: CallbackQuery, state: FSMContext):
             ],
             scope=BotCommandScopeChat(chat_id=callback.message.chat.id)
         )
-        await show_main_menu(callback.message, role)
+        await show_main_menu(callback, role)
 
     await callback.answer()

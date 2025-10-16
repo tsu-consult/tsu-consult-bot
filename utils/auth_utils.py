@@ -12,10 +12,7 @@ async def ensure_auth(telegram_id: int, obj: Message | CallbackQuery) -> str | N
             await auth.login(telegram_id)
             role = await auth.get_role(telegram_id)
         except ValueError:
-            if isinstance(obj, CallbackQuery):
-                await show_main_menu(obj.message, role=None)
-            else:
-                await show_main_menu(obj, role=None)
+            await show_main_menu(obj, role=None)
             return None
 
     if role:

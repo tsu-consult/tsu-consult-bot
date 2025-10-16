@@ -150,7 +150,7 @@ async def process_role_selection(callback: CallbackQuery, state: FSMContext):
         except (TelegramBadRequest, TelegramAPIError):
             pass
 
-        await show_main_menu(callback.message, role)
+        await show_main_menu(callback, role)
         await callback.answer()
 
     else:
