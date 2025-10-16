@@ -42,5 +42,43 @@ class TSUConsultations:
             logger.error(f"Unexpected error booking consultation {consultation_id}: {e}")
             return "error"
 
+    @staticmethod
+    async def get_consultations(telegram_id: int, page: int = 0, page_size: int = 10) -> dict:
+        auth.telegram_id = telegram_id
+        await auth.init_redis()
+        await auth.init_session()
+        if not (auth.access_token and auth.refresh_token):
+            await auth.load_tokens_if_needed()
+
+        try:
+            params = {"page": page, "page_size": page_size}
+            async with auth.session.get(
+                    f"{TSUConsultations.BASE_URL}consultations/my/",
+                    params=params,
+                    headers={"Authorization": f"Bearer {auth.access_token}"}
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return {
+                        "count": data.get("count", 0),
+                        "total_pages": data.get("total_pages", 0),
+                        "current_page": data.get("current_page", 0),
+                        "next": data.get("next"),
+                        "previous": data.get("previous"),
+                        "results": data.get("results", [])
+                    }
+                else:
+                    logger.error(f"Error getting consultations: HTTP {resp.status} - {await resp.text()}")
+                    print()
+                    return {"count": 0, "total_pages": 0, "current_page": 0, "next": None, "previous": None,
+                            "results": []}
+
+        except aiohttp.ClientError as e:
+            logger.error(f"HTTP error getting consultations: {e}")
+            return {"count": 0, "total_pages": 0, "current_page": 0, "next": None, "previous": None, "results": []}
+        except Exception as e:
+            logger.error(f"Unexpected error getting consultations: {e}")
+            return {"count": 0, "total_pages": 0, "current_page": 0, "next": None, "previous": None, "results": []}
+
 
 consultations = TSUConsultations()

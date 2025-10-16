@@ -1,6 +1,5 @@
 ﻿import asyncio
 import logging
-from datetime import datetime
 
 from aiogram import Router, F
 from aiogram.exceptions import TelegramBadRequest
@@ -13,6 +12,7 @@ from services.consultations import consultations
 from services.teachers import teachers
 from states.book_consultation import BookConsultation
 from utils.auth_utils import ensure_auth
+from utils.consultations_utils import format_time
 
 router = Router()
 PAGE_SIZE = 3
@@ -193,12 +193,6 @@ async def show_schedule_page(callback: CallbackQuery, telegram_id: int, teacher_
 
     teacher_name = page_data["results"][0].get("teacher_name", "Преподаватель")
 
-    def format_time(t: str) -> str:
-        try:
-            return datetime.strptime(t, "%H:%M:%S").strftime("%H:%M")
-        except ValueError:
-            return t
-
     text_lines = [
         f"👨‍🏫 <b>Расписание консультаций — {teacher_name}</b>\n",
         "Вы можете записаться на доступные консультации (✅) или следить за обновлениями.",
@@ -282,7 +276,7 @@ async def edit_teachers_page(callback: CallbackQuery, page: int):
     )
 
     keyboard.inline_keyboard.append([
-        InlineKeyboardButton(text="🔙 Назад в главное меню", callback_data="back_to_main_menu")
+        InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")
     ])
 
     await callback.message.edit_text(
