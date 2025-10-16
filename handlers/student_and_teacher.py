@@ -2,6 +2,7 @@
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 
+from keyboards.main_keyboard import show_main_menu
 from services.consultations import consultations
 from utils.auth_utils import ensure_auth
 from utils.consultations_utils import format_time, format_date_verbose, format_datetime_verbose
@@ -250,8 +251,6 @@ async def unsubscribe_from_request(callback: CallbackQuery):
 async def show_requests_page(callback: CallbackQuery, telegram_id: int, role: str, page: int):
     requests_page = await consultations.get_requests(telegram_id, page=page, page_size=PAGE_SIZE)
 
-    print(requests_page)
-
     if not requests_page or not requests_page.get("results"):
         await callback.message.edit_text(
             "📄 Нет запросов на консультацию.",
@@ -371,11 +370,23 @@ async def create_consultation_from_request(callback: CallbackQuery, state: FSMCo
 
     requests_page = await consultations.get_requests(telegram_id, page=page, page_size=PAGE_SIZE)
     request_title = None
+    request_status = None
     if requests_page and requests_page.get("results"):
         for r in requests_page["results"]:
             if r.get("id") == request_id:
                 request_title = r.get("title")
+                request_status = r.get("status")
                 break
+
+    if request_status and request_status != "open":
+        status = STATUS_RU.get(request_status, request_status)
+        await callback.answer(
+            f"❌ По запросу со статусом '{status}' нельзя создать консультацию — только по открытым запросам.",
+            show_alert=True
+        )
+        await show_main_menu(callback.message, role, callback.message)
+        return
+
     if not request_title:
         request_title = "Без названия"
 
