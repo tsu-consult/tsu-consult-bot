@@ -14,8 +14,7 @@ class TSUTeachers:
         auth.telegram_id = telegram_id
         await auth.init_redis()
         await auth.init_session()
-        if not (auth.access_token and auth.refresh_token):
-            await auth.load_tokens_if_needed()
+        await auth.load_tokens_if_needed()
 
         params = {"page": page + 1, "page_size": page_size}
         try:
@@ -41,8 +40,7 @@ class TSUTeachers:
         auth.telegram_id = telegram_id
         await auth.init_redis()
         await auth.init_session()
-        if not (auth.access_token and auth.refresh_token):
-            await auth.load_tokens_if_needed()
+        await auth.load_tokens_if_needed()
 
         params = {"page": page + 1, "page_size": page_size}
         endpoint = f"teachers/{teacher_id}/consultations/"
@@ -69,8 +67,7 @@ class TSUTeachers:
         auth.telegram_id = telegram_id
         await auth.init_redis()
         await auth.init_session()
-        if not (auth.access_token and auth.refresh_token):
-            await auth.load_tokens_if_needed()
+        await auth.load_tokens_if_needed()
 
         try:
             await auth.api_request("POST", f"teachers/{teacher_id}/subscribe/")
@@ -84,8 +81,7 @@ class TSUTeachers:
         auth.telegram_id = telegram_id
         await auth.init_redis()
         await auth.init_session()
-        if not (auth.access_token and auth.refresh_token):
-            await auth.load_tokens_if_needed()
+        await auth.load_tokens_if_needed()
 
         try:
             await auth.api_request("DELETE", f"teachers/{teacher_id}/unsubscribe/")
@@ -99,8 +95,7 @@ class TSUTeachers:
         auth.telegram_id = telegram_id
         await auth.init_redis()
         await auth.init_session()
-        if not (auth.access_token and auth.refresh_token):
-            await auth.load_tokens_if_needed()
+        await auth.load_tokens_if_needed()
 
         try:
             response = await auth.api_request("GET", "teachers/subscribed/")

@@ -57,7 +57,10 @@ async def process_contact(message: Message, state: FSMContext):
     phone_number = contact.phone_number
     raw_username = message.from_user.username
 
-    username = raw_username if raw_username.startswith("@") else f"@{raw_username}"
+    if raw_username:
+        username = raw_username if raw_username.startswith("@") else f"@{raw_username}"
+    else:
+        username = ""
 
     first_name = contact.first_name or ""
     last_name = contact.last_name or ""
