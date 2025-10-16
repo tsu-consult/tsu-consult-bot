@@ -12,7 +12,7 @@ from services.consultations import consultations
 from services.teachers import teachers
 from states.book_consultation import BookConsultation
 from utils.auth_utils import ensure_auth
-from utils.consultations_utils import format_time
+from utils.consultations_utils import format_time, format_date_verbose
 
 router = Router()
 PAGE_SIZE = 3
@@ -203,9 +203,12 @@ async def show_schedule_page(callback: CallbackQuery, telegram_id: int, teacher_
         status_emoji = "✅" if not c["is_closed"] else "🔒"
         start_time = format_time(c["start_time"])
         end_time = format_time(c["end_time"])
+        formatted_date = format_date_verbose(c["date"])
+
         text_lines.append(
             f"\n<b>{status_emoji} {c['title']}</b>\n"
-            f"📅 {c['date']} | 🕒 {start_time}–{end_time}\n"
+            f"📅 {formatted_date}\n"
+            f"🕒 {start_time} – {end_time}\n"
             f"👥 Мест: {c['max_students']}\n"
             f"📌 Статус: {'Открыта' if not c['is_closed'] else 'Закрыта'}"
         )
