@@ -5,6 +5,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, Message
 
+from handlers.student_and_teacher import show_requests_page
 from keyboards.main_keyboard import show_main_menu
 from services.consultations import consultations
 from states.create_consultation import CreateConsultationFSM
@@ -440,3 +441,13 @@ async def teacher_confirm_close(callback: CallbackQuery):
         return
 
     await callback.answer()
+
+@router.callback_query(F.data == "teacher_requests")
+async def teacher_view_requests(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    await show_requests_page(callback, telegram_id, role, page=1)

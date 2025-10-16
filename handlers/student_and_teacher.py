@@ -134,7 +134,7 @@ async def choose_request_to_subscribe(callback: CallbackQuery):
 
     page = int(callback.data.split("_")[-1])
 
-    requests_page = await consultations.get_requests(telegram_id, role=role, page=page, page_size=PAGE_SIZE)
+    requests_page = await consultations.get_requests(telegram_id, page=page, page_size=PAGE_SIZE)
 
     if not requests_page or not requests_page.get("results"):
         await callback.answer("❌ Нет запросов", show_alert=True)
@@ -194,7 +194,7 @@ async def choose_request_to_unsubscribe(callback: CallbackQuery):
 
     page = int(callback.data.split("_")[-1])
 
-    requests_page = await consultations.get_requests(telegram_id, role=role, page=page, page_size=PAGE_SIZE)
+    requests_page = await consultations.get_requests(telegram_id, page=page, page_size=PAGE_SIZE)
 
     if not requests_page or not requests_page.get("results"):
         await callback.answer("❌ Нет запросов", show_alert=True)
@@ -246,10 +246,17 @@ async def unsubscribe_from_request(callback: CallbackQuery):
 
 
 async def show_requests_page(callback: CallbackQuery, telegram_id: int, role: str, page: int):
-    requests_page = await consultations.get_requests(telegram_id, role=role, page=page, page_size=PAGE_SIZE)
+    requests_page = await consultations.get_requests(telegram_id, page=page, page_size=PAGE_SIZE)
+
+    print(requests_page)
 
     if not requests_page or not requests_page.get("results"):
-        await callback.message.edit_text("📄 Нет запросов на консультацию.")
+        await callback.message.edit_text(
+            "📄 Нет запросов на консультацию.",
+            reply_markup = InlineKeyboardMarkup(
+                inline_keyboard=[[InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")]]
+            )
+        )
         await callback.answer()
         return
 
@@ -288,10 +295,11 @@ async def show_requests_page(callback: CallbackQuery, telegram_id: int, role: st
     if nav_row:
         keyboard_rows.append(nav_row)
 
-    keyboard_rows.append([
-        InlineKeyboardButton(text="🔔 Подписаться", callback_data=f"choose_request_subscribe_{current_page}"),
-        InlineKeyboardButton(text="🔕 Отписаться", callback_data=f"choose_request_unsubscribe_{current_page}")
-    ])
+    if role == "student":
+        keyboard_rows.append([
+            InlineKeyboardButton(text="🔔 Подписаться", callback_data=f"choose_request_subscribe_{current_page}"),
+            InlineKeyboardButton(text="🔕 Отписаться", callback_data=f"choose_request_unsubscribe_{current_page}")
+        ])
 
     keyboard_rows.append([InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")])
     keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)

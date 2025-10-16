@@ -134,7 +134,7 @@ class TSUConsultations:
             return None
 
     @staticmethod
-    async def get_requests(telegram_id: int, role: str, page: int = 1, page_size: int = 10) -> dict:
+    async def get_requests(telegram_id: int, page: int = 1, page_size: int = 10) -> dict:
         auth.telegram_id = telegram_id
         await auth.init_redis()
         await auth.init_session()
@@ -143,10 +143,6 @@ class TSUConsultations:
 
         try:
             params = {"page": page, "page_size": page_size}
-            if role == "student":
-                params["student_id"] = telegram_id
-            elif role == "teacher":
-                params["teacher_id"] = telegram_id
 
             async with auth.session.get(
                     f"{TSUConsultations.BASE_URL}consultations/requests/",
