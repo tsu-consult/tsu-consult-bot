@@ -19,48 +19,22 @@ PAGE_SIZE = 3
 
 @router.callback_query(F.data == "student_view_teachers")
 async def show_teachers_first_page(callback: CallbackQuery):
-    telegram_id = callback.from_user.id
-    role = await ensure_auth(telegram_id, callback)
-    if not role:
-        await callback.answer()
-        return
-
-    page_data = await teachers.get_teachers_page(callback.from_user.id, page=0, page_size=PAGE_SIZE)
-    keyboard = build_paginated_keyboard(
-        data_list=page_data["results"],
-        page=page_data["current_page"],
-        total_pages=page_data["total_pages"],
-        callback_prefix="teacher"
-    )
-    await callback.message.edit_text(
-        "👨‍🏫 Преподаватели\n\n"
-        "Нажмите на преподавателя, чтобы посмотреть его расписание или подписаться/отписаться на уведомления о новых консультациях.",
-        reply_markup=keyboard
-    )
-    await callback.answer()
+    await edit_teachers_page(callback, page=0)
 
 @router.callback_query(F.data.regexp(r"teacher_page_\d+"))
 async def paginate_teachers(callback: CallbackQuery):
+    page = int(callback.data.split("_")[-1])
+    await edit_teachers_page(callback, page=page)
+
+@router.callback_query(F.data == "back_to_main_menu")
+async def back_to_main_menu(callback: CallbackQuery):
     telegram_id = callback.from_user.id
     role = await ensure_auth(telegram_id, callback)
     if not role:
         await callback.answer()
         return
 
-    page = int(callback.data.split("_")[-1])
-    page_data = await teachers.get_teachers_page(callback.from_user.id, page=page, page_size=PAGE_SIZE)
-
-    keyboard = build_paginated_keyboard(
-        data_list=page_data["results"],
-        page=page_data["current_page"],
-        total_pages=page_data["total_pages"],
-        callback_prefix="teacher"
-    )
-    await callback.message.edit_text(
-        "👨‍🏫 Преподаватели\n\n"
-        "Нажмите на преподавателя, чтобы посмотреть его расписание или подписаться/отписаться на уведомления о новых консультациях.",
-        reply_markup=keyboard
-    )
+    await show_main_menu(callback.message, role, edit_message=callback.message)
     await callback.answer()
 
 
@@ -279,7 +253,7 @@ async def show_schedule_page(callback: CallbackQuery, telegram_id: int, teacher_
         keyboard_rows.append(action_row)
 
     keyboard_rows.append([
-        InlineKeyboardButton(text="🔙 К преподавателям", callback_data="student_view_teachers")
+        InlineKeyboardButton(text="🔙 Назад к преподавателям", callback_data="student_view_teachers")
     ])
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
@@ -288,5 +262,33 @@ async def show_schedule_page(callback: CallbackQuery, telegram_id: int, teacher_
         "\n".join(text_lines),
         reply_markup=keyboard,
         parse_mode="HTML"
+    )
+    await callback.answer()
+
+
+async def edit_teachers_page(callback: CallbackQuery, page: int):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if not role:
+        await callback.answer()
+        return
+
+    page_data = await teachers.get_teachers_page(callback.from_user.id, page=page, page_size=PAGE_SIZE)
+    keyboard = build_paginated_keyboard(
+        data_list=page_data["results"],
+        page=page_data["current_page"],
+        total_pages=page_data["total_pages"],
+        callback_prefix="teacher"
+    )
+
+    keyboard.inline_keyboard.append([
+        InlineKeyboardButton(text="🔙 Назад в главное меню", callback_data="back_to_main_menu")
+    ])
+
+    await callback.message.edit_text(
+        "👨‍🏫 Преподаватели\n\n"
+        "Нажмите на преподавателя, чтобы посмотреть его расписание или подписаться/отписаться "
+        "на уведомления о новых консультациях.",
+        reply_markup=keyboard
     )
     await callback.answer()
