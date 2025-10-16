@@ -27,14 +27,13 @@ teacher_menu = types.InlineKeyboardMarkup(
     inline_keyboard=[
         [
             types.InlineKeyboardButton(text="➕ Создать консультацию", callback_data="teacher_create_consultation"),
-            # types.InlineKeyboardButton(text="📋 Список студентов на консультацию", callback_data="teacher_consultation_students")
         ],
         [
             types.InlineKeyboardButton(text="🔒 Закрыть запись", callback_data="teacher_close_consultation"),
             types.InlineKeyboardButton(text="❌ Отменить консультацию", callback_data="teacher_cancel_consultation")
         ],
         [
-            types.InlineKeyboardButton(text="📝 Создать консультацию по запросу студентов", callback_data="teacher_create_from_request")
+            types.InlineKeyboardButton(text="📝 Посмотреть запросы студентов", callback_data="teacher_student_requests")
         ],
         [
             types.InlineKeyboardButton(text="📅 Мои консультации", callback_data="teacher_my_consultations")

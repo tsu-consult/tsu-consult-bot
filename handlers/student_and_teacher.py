@@ -84,6 +84,12 @@ async def view_my_consultations(callback: CallbackQuery):
             callback_data=f"student_cancel_consultations_{current_page}"
         )])
 
+    if role == "teacher":
+        keyboard_rows.append([InlineKeyboardButton(
+            text="📋 Список студентов",
+            callback_data=f"teacher_choose_students_{current_page}"
+        )])
+
     keyboard_rows.append([InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")])
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
@@ -295,4 +301,74 @@ async def show_requests_page(callback: CallbackQuery, telegram_id: int, role: st
         reply_markup=keyboard,
         parse_mode="HTML"
     )
+    await callback.answer()
+
+
+@router.callback_query(F.data.regexp(r"teacher_choose_students_\d+"))
+async def teacher_choose_consultation_for_students(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    page = int(callback.data.split("_")[-1])
+    consultations_page = await consultations.get_consultations(telegram_id, page=page, page_size=PAGE_SIZE)
+
+    if not consultations_page.get("results"):
+        await callback.answer("❌ Нет консультаций на этой странице.", show_alert=True)
+        return
+
+    keyboard_rows = []
+    for c in consultations_page["results"]:
+        title = c.get("title", "Без названия")
+        date_human = format_date_verbose(c.get("date")) if c.get("date") else "—"
+        keyboard_rows.append([
+            InlineKeyboardButton(
+                text=f"{title} ({date_human})",
+                callback_data=f"teacher_show_students_{c['id']}_{page}"
+            )
+        ])
+
+    keyboard_rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data=f"teacher_my_consultations_{page}")])
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
+    await callback.message.edit_text(
+        "Выберите консультацию, чтобы посмотреть список студентов 👇",
+        reply_markup=keyboard
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.regexp(r"teacher_show_students_\d+_\d+"))
+async def teacher_show_students(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    _, _, _, consultation_id_str, page_str = callback.data.split("_")
+    consultation_id = int(consultation_id_str)
+    page = int(page_str)
+
+    students = await consultations.get_consultation_students(telegram_id, consultation_id)
+
+    if not students:
+        text = "👥 На эту консультацию пока никто не записался."
+    else:
+        lines = ["👥 Список записанных студентов:"]
+        for idx, s in enumerate(students, start=1):
+            first_name = s.get("first_name") or s.get("student", {}).get("first_name", "")
+            last_name = s.get("last_name") or s.get("student", {}).get("last_name", "")
+            username = s.get("username") or s.get("student", {}).get("username", "—")
+            lines.append(f"{idx}. {first_name} {last_name} ({username})")
+        text = "\n".join(lines)
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data=f"teacher_choose_students_{page}")],
+        [InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")]
+    ])
+
+    await callback.message.edit_text(text, reply_markup=keyboard)
     await callback.answer()
