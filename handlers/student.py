@@ -98,7 +98,7 @@ async def unsubscribe_teacher(callback: CallbackQuery):
 
 
 @router.callback_query(F.data.regexp(r"choose_book_\d+_\d+"))
-async def choose_consultation(callback: CallbackQuery):
+async def choose_consultation(callback: CallbackQuery, state: FSMContext):
     telegram_id = callback.from_user.id
     role = await ensure_auth(telegram_id, callback)
     if not role:
@@ -106,6 +106,8 @@ async def choose_consultation(callback: CallbackQuery):
         return
 
     teacher_id, page = map(int, callback.data.split("_")[2:])
+    await state.update_data(teacher_id=teacher_id, current_page=page)
+
     page_data = await teachers.get_teacher_schedule(telegram_id, teacher_id, page=page, page_size=PAGE_SIZE)
 
     open_consultations = [c for c in page_data["results"] if not c["is_closed"]]
@@ -138,9 +140,15 @@ async def book_consultation_callback(callback: CallbackQuery, state: FSMContext)
 
     consultation_id = int(callback.data.split("_")[1])
 
+    state_data = await state.get_data()
+    teacher_id = state_data.get("teacher_id")
+    current_page = state_data.get("current_page", 1)
+
     await state.update_data(
         role=role,
-        consultation_id=consultation_id
+        consultation_id=consultation_id,
+        teacher_id=teacher_id,
+        current_page=current_page
     )
 
     await callback.message.edit_text(
@@ -155,6 +163,8 @@ async def handle_consultation_request(message: Message, state: FSMContext):
     user_data = await state.get_data()
     role = user_data.get("role")
     consultation_id = user_data.get("consultation_id")
+    teacher_id = user_data.get("teacher_id")
+    current_page = user_data.get("current_page", 1)
 
     if not message.text or not message.text.strip():
         await message.answer("❗ Пожалуйста, введите текст запроса.")
@@ -164,7 +174,13 @@ async def handle_consultation_request(message: Message, state: FSMContext):
     result = await consultations.book_consultation(telegram_id, consultation_id, request_text)
 
     if result == "success":
-        await message.answer("✅ Вы успешно записались на консультацию!")
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ Назад к преподавателю", callback_data=f"schedule_{teacher_id}_{current_page}")]
+        ])
+        await message.answer(
+            "✅ Вы успешно записались на консультацию!",
+            reply_markup=keyboard
+        )
     elif result == "conflict":
         warning_msg = await message.answer("⚠️ Вы уже записаны на эту консультацию.")
         await show_main_menu(message, role)
