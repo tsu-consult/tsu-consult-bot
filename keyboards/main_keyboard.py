@@ -63,8 +63,18 @@ guest_menu = types.InlineKeyboardMarkup(
 )
 
 
-async def show_main_menu(message: Message, role: str | None, edit_message: types.Message | None = None):
-    telegram_id = message.from_user.id
+def show_main_menu_target_message(obj: types.Message | types.CallbackQuery) -> types.Message:
+    return obj.message if isinstance(obj, types.CallbackQuery) else obj
+
+
+async def show_main_menu(obj: types.Message | types.CallbackQuery, role: str | None, edit_message: types.Message | None = None):
+    if isinstance(obj, types.CallbackQuery):
+        telegram_id = obj.from_user.id
+        base_message = obj.message
+    else:
+        telegram_id = obj.from_user.id
+        base_message = obj
+
     first_name, last_name = await auth.get_user_name(telegram_id)
 
     if role == "student":
@@ -83,7 +93,8 @@ async def show_main_menu(message: Message, role: str | None, edit_message: types
         greeting = "👋 Привет!\n\nЧтобы продолжить, зарегистрируйтесь или войдите в систему 👇"
         keyboard = guest_menu
 
+    target_message = edit_message or base_message
     if edit_message:
-        await edit_message.edit_text(greeting, reply_markup=keyboard)
+        await target_message.edit_text(greeting, reply_markup=keyboard)
     else:
-        await message.answer(greeting, reply_markup=keyboard)
+        await target_message.answer(greeting, reply_markup=keyboard)
