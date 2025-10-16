@@ -1,9 +1,11 @@
 ﻿from aiogram import Router, F
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.fsm.context import FSMContext
 
 from services.consultations import consultations
 from utils.auth_utils import ensure_auth
 from utils.consultations_utils import format_time, format_date_verbose, format_datetime_verbose
+from states.create_consultation import CreateConsultationFSM
 
 router = Router()
 PAGE_SIZE = 3
@@ -301,12 +303,88 @@ async def show_requests_page(callback: CallbackQuery, telegram_id: int, role: st
             InlineKeyboardButton(text="🔕 Отписаться", callback_data=f"choose_request_unsubscribe_{current_page}")
         ])
 
+    if role == "teacher":
+        keyboard_rows.append([
+            InlineKeyboardButton(text="➕ Создать консультацию", callback_data=f"teacher_choose_request_create_{current_page}")
+        ])
+
     keyboard_rows.append([InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")])
     keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
 
     await callback.message.edit_text(
         "\n".join(text_lines),
         reply_markup=keyboard,
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.regexp(r"teacher_choose_request_create_\d+"))
+async def choose_request_to_create(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    page = int(callback.data.split("_")[-1])
+
+    requests_page = await consultations.get_requests(telegram_id, page=page, page_size=PAGE_SIZE)
+    if not requests_page or not requests_page.get("results"):
+        await callback.answer("❌ Нет запросов", show_alert=True)
+        return
+
+    keyboard_rows = []
+    for r in requests_page["results"]:
+        title = r.get("title", "Без названия")
+        status = STATUS_RU.get(r.get("status"), r.get("status", "—"))
+        keyboard_rows.append([
+            InlineKeyboardButton(
+                text=f"{title} — {status}",
+                callback_data=f"teacher_create_from_request_{r['id']}_{page}"
+            )
+        ])
+
+    keyboard_rows.append([
+        InlineKeyboardButton(text="⬅️ Назад", callback_data=f"teacher_requests_{page}")
+    ])
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
+    await callback.message.edit_text(
+        "Выберите запрос, на основе которого хотите создать консультацию 👇",
+        reply_markup=keyboard
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.regexp(r"teacher_create_from_request_\d+_\d+"))
+async def create_consultation_from_request(callback: CallbackQuery, state: FSMContext):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    parts = callback.data.split("_")
+    request_id = int(parts[-2])
+    page = int(parts[-1])
+
+    requests_page = await consultations.get_requests(telegram_id, page=page, page_size=PAGE_SIZE)
+    request_title = None
+    if requests_page and requests_page.get("results"):
+        for r in requests_page["results"]:
+            if r.get("id") == request_id:
+                request_title = r.get("title")
+                break
+    if not request_title:
+        request_title = "Без названия"
+
+    await state.clear()
+    await state.update_data(title=request_title, source_request_id=request_id)
+    await state.set_state(CreateConsultationFSM.waiting_for_date)
+
+    await callback.message.edit_text(
+        f"Тема консультации уже заполнена: <b>{request_title}</b>\n\nВведите дату в формате ДД-ММ-ГГГГ (например, 16-10-2025) 👇",
         parse_mode="HTML"
     )
     await callback.answer()

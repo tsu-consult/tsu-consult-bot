@@ -269,6 +269,50 @@ class TSUConsultations:
             return None
 
     @staticmethod
+    async def create_consultation_from_request(
+            telegram_id: int,
+            request_id: int,
+            title: str,
+            date: str,
+            start_time: str,
+            end_time: str,
+            max_students: int
+    ) -> dict | None:
+        auth.telegram_id = telegram_id
+        await auth.init_redis()
+        await auth.init_session()
+        if not (auth.access_token and auth.refresh_token):
+            await auth.load_tokens_if_needed()
+
+        payload = {
+            "title": title,
+            "date": date,
+            "start_time": start_time,
+            "end_time": end_time,
+            "max_students": max_students,
+            "source_request_id": request_id
+        }
+
+        try:
+            async with auth.session.post(
+                    f"{TSUConsultations.BASE_URL}consultations/from/{request_id}/",
+                    json=payload,
+                    headers={"Authorization": f"Bearer {auth.access_token}"}
+            ) as resp:
+                if resp.status in (200, 201):
+                    return await resp.json()
+                else:
+                    logger.error(
+                        f"Error creating consultation from request {request_id}: HTTP {resp.status} - {await resp.text()}")
+                    return None
+        except aiohttp.ClientError as e:
+            logger.error(f"HTTP error creating consultation from request {request_id}: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error creating consultation from request {request_id}: {e}")
+            return None
+
+    @staticmethod
     async def cancel_consultation(telegram_id: int, consultation_id: int) -> str:
         auth.telegram_id = telegram_id
         await auth.init_redis()

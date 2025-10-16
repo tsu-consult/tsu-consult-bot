@@ -300,14 +300,26 @@ async def confirm_create_consultation(callback: CallbackQuery, state: FSMContext
     end_time = data.get("end_time")
     max_students = data.get("max_students")
 
-    result = await consultations.create_consultation(
-        telegram_id=telegram_id,
-        title=title,
-        date=date,
-        start_time=start_time,
-        end_time=end_time,
-        max_students=max_students
-    )
+    source_request_id = data.get("source_request_id")
+    if source_request_id:
+        result = await consultations.create_consultation_from_request(
+            telegram_id=telegram_id,
+            request_id=source_request_id,
+            title=title,
+            date=date,
+            start_time=start_time,
+            end_time=end_time,
+            max_students=max_students
+        )
+    else:
+        result = await consultations.create_consultation(
+            telegram_id=telegram_id,
+            title=title,
+            date=date,
+            start_time=start_time,
+            end_time=end_time,
+            max_students=max_students
+        )
 
     if result:
         await callback.message.edit_text("✅ Консультация успешно создана!")
