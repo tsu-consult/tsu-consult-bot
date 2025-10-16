@@ -43,7 +43,7 @@ class TSUConsultations:
             return "error"
 
     @staticmethod
-    async def get_consultations(telegram_id: int, page: int = 0, page_size: int = 10) -> dict:
+    async def get_consultations(telegram_id: int, page: int = 1, page_size: int = 10) -> dict:
         auth.telegram_id = telegram_id
         await auth.init_redis()
         await auth.init_session()
@@ -69,7 +69,6 @@ class TSUConsultations:
                     }
                 else:
                     logger.error(f"Error getting consultations: HTTP {resp.status} - {await resp.text()}")
-                    print()
                     return {"count": 0, "total_pages": 0, "current_page": 0, "next": None, "previous": None,
                             "results": []}
 
@@ -79,6 +78,24 @@ class TSUConsultations:
         except Exception as e:
             logger.error(f"Unexpected error getting consultations: {e}")
             return {"count": 0, "total_pages": 0, "current_page": 0, "next": None, "previous": None, "results": []}
+
+    async def cancel_booking(self, telegram_id: int, consultation_id: int) -> bool:
+        auth.telegram_id = telegram_id
+        await auth.init_redis()
+        await auth.init_session()
+        if not (auth.access_token and auth.refresh_token):
+            await auth.load_tokens_if_needed()
+
+        try:
+            async with auth.session.delete(
+                    f"{self.BASE_URL}consultations/{consultation_id}/cancel/",
+                    headers={"Authorization": f"Bearer {auth.access_token}"}
+            ) as resp:
+                var = True if resp.status == 204 else False
+                return var
+        except Exception as e:
+            logger.error(f"Error cancelling consultation {consultation_id}: {e}")
+            return False
 
 
 consultations = TSUConsultations()

@@ -6,6 +6,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, Message
 
+from handlers.student_and_teacher import view_my_consultations
 from keyboards.main_keyboard import show_main_menu
 from keyboards.paginated_keyboard import build_paginated_keyboard
 from services.consultations import consultations
@@ -178,6 +179,57 @@ async def handle_consultation_request(message: Message, state: FSMContext):
         await message.answer("❌ Не удалось записаться. Попробуйте позже.")
 
     await state.clear()
+
+
+@router.callback_query(F.data.regexp(r"student_cancel_consultations_(\d+)"))
+async def choose_consultation_to_cancel(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if not role:
+        await callback.answer()
+        return
+
+    page = max(int(callback.data.split("_")[-1]), 1)
+    consultations_page = await consultations.get_consultations(telegram_id, page=page, page_size=PAGE_SIZE)
+
+    if not consultations_page.get("results"):
+        await callback.answer("❌ У вас нет записей для отмены.", show_alert=True)
+        return
+
+    cancellable_consultations = [c for c in consultations_page["results"] if c["status"] == "active"]
+
+    if not cancellable_consultations:
+        await callback.answer("❌ Нет доступных для отмены консультаций на этой странице.", show_alert=True)
+        return
+
+    keyboard_rows = [
+        [InlineKeyboardButton(
+            text=f"{c['title']} ({format_date_verbose(c['date'])})",
+            callback_data=f"cancel_booking_{c['id']}"
+        )]
+        for c in cancellable_consultations
+    ]
+    keyboard_rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data=f"{role}_my_consultations_{page}")])
+    keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
+
+    await callback.message.edit_text(
+        "Выберите консультацию на этой странице, запись на которую вы хотите отменить 👇",
+        reply_markup=keyboard
+    )
+    await callback.answer()
+
+@router.callback_query(F.data.regexp(r"cancel_booking_\d+"))
+async def cancel_booking(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    consultation_id = int(callback.data.split("_")[2])
+
+    success = await consultations.cancel_booking(telegram_id, consultation_id)
+    if success:
+        await callback.answer("✅ Запись на консультацию отменена!", show_alert=True)
+    else:
+        await callback.answer("❌ Не удалось отменить запись. Попробуйте позже.", show_alert=True)
+
+    await view_my_consultations(callback)
 
 
 

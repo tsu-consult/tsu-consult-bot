@@ -17,10 +17,18 @@ async def view_my_consultations(callback: CallbackQuery):
         await callback.answer()
         return
 
-    parts = callback.data.split("_")
-    page = int(parts[-1]) if parts[-1].isdigit() else 1
+    if callback.data.startswith(f"{role}_my_consultations"):
+        parts = callback.data.split("_")
+        page = int(parts[-1]) if len(parts) > 2 and parts[-1].isdigit() else 1
+    else:
+        page = 1
 
-    consultations_page = await consultations.get_consultations(telegram_id, page=page, page_size=PAGE_SIZE)
+    consultations_page = await consultations.get_consultations(
+        telegram_id,
+        page=page,
+        page_size=PAGE_SIZE
+    )
+
     if not consultations_page or not consultations_page.get("results"):
         await callback.message.edit_text("📅 У вас пока нет консультаций.")
         await callback.answer()
@@ -30,10 +38,15 @@ async def view_my_consultations(callback: CallbackQuery):
     total_pages = max(consultations_page.get("total_pages", 1), 1)
 
     text_lines = [f"📅 <b>Мои консультации — страница {current_page} из {total_pages}</b>"]
+    cancellable_consultations_exist = False
+
     for c in consultations_page["results"]:
         start_time = format_time(c["start_time"])
         end_time = format_time(c["end_time"])
         formatted_date = format_date_verbose(c["date"])
+
+        if role == "student" and c["status"] == "active":
+            cancellable_consultations_exist = True
 
         text_lines.append(
             f"\n<b>{c['title']}</b>\n"
@@ -46,16 +59,24 @@ async def view_my_consultations(callback: CallbackQuery):
 
     keyboard_rows = []
 
+    nav_row = []
     if current_page > 1:
-        keyboard_rows.append([InlineKeyboardButton(
+        nav_row.append(InlineKeyboardButton(
             text="⬅️ Назад",
             callback_data=f"{role}_my_consultations_{current_page - 1}"
-        )])
-
+        ))
     if current_page < total_pages:
-        keyboard_rows.append([InlineKeyboardButton(
+        nav_row.append(InlineKeyboardButton(
             text="➡️ Вперёд",
             callback_data=f"{role}_my_consultations_{current_page + 1}"
+        ))
+    if nav_row:
+        keyboard_rows.append(nav_row)
+
+    if role == "student" and cancellable_consultations_exist:
+        keyboard_rows.append([InlineKeyboardButton(
+            text="❌ Отменить запись",
+            callback_data=f"student_cancel_consultations_{current_page}"
         )])
 
     keyboard_rows.append([InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")])
