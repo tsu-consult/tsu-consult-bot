@@ -15,6 +15,141 @@ import asyncio
 
 router = Router()
 
+PAGE_SIZE = 3
+
+
+async def show_cancel_page(callback: CallbackQuery, telegram_id: int, page: int):
+    page_data = await consultations.get_consultations(telegram_id, page=page, page_size=PAGE_SIZE)
+    results = page_data.get("results", [])
+    current_page = page_data.get("current_page", page)
+    total_pages = max(page_data.get("total_pages", 1), 1)
+
+    open_consults = [c for c in results if not c.get("is_closed")]
+
+    text = f"Выберите консультацию, которую хотите отменить 👇\n\nСтраница {current_page} из {total_pages}"
+
+    keyboard_rows: list[list[InlineKeyboardButton]] = []
+    for c in open_consults:
+        title = c.get("title", "Без названия")
+        date_iso = c.get("date")
+        date_human = format_date_verbose(date_iso) if date_iso else "—"
+        keyboard_rows.append([
+            InlineKeyboardButton(
+                text=f"{title} ({date_human})",
+                callback_data=f"teacher_choose_cancel_{c['id']}_{current_page}"
+            )
+        ])
+
+    nav_row = []
+    if current_page > 1:
+        nav_row.append(InlineKeyboardButton(
+            text="⬅️ Назад",
+            callback_data=f"teacher_cancel_consultation_{current_page - 1}"
+        ))
+    if current_page < total_pages:
+        nav_row.append(InlineKeyboardButton(
+            text="➡️ Вперёд",
+            callback_data=f"teacher_cancel_consultation_{current_page + 1}"
+        ))
+    if nav_row:
+        keyboard_rows.append(nav_row)
+
+    keyboard_rows.append([InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")])
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
+
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard)
+    except TelegramBadRequest:
+        await callback.message.answer(text, reply_markup=keyboard)
+
+
+@router.callback_query(F.data == "teacher_cancel_consultation")
+async def teacher_start_cancel_consultation(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    await show_cancel_page(callback, telegram_id, page=1)
+    await callback.answer()
+
+
+@router.callback_query(F.data.regexp(r"^teacher_cancel_consultation_(\d+)$"))
+async def teacher_cancel_consultation_paginate(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    page = int(callback.data.split("_")[-1])
+    await show_cancel_page(callback, telegram_id, page=page)
+    await callback.answer()
+
+
+@router.callback_query(F.data.regexp(r"^teacher_choose_cancel_(\d+)_(\d+)$"))
+async def teacher_choose_cancel(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    parts = callback.data.split("_")
+    consultation_id = int(parts[-2])
+    page = int(parts[-1])
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Подтвердить отмену", callback_data=f"teacher_confirm_cancel_{consultation_id}_{page}")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data=f"teacher_cancel_consultation_{page}")],
+        [InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")]
+    ])
+
+    try:
+        await callback.message.edit_text(
+            "Вы уверены, что хотите отменить эту консультацию?",
+            reply_markup=keyboard
+        )
+    except TelegramBadRequest:
+        await callback.message.answer(
+            "Вы уверены, что хотите отменить эту консультацию?",
+            reply_markup=keyboard
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data.regexp(r"^teacher_confirm_cancel_(\d+)_(\d+)$"))
+async def teacher_confirm_cancel(callback: CallbackQuery, state: FSMContext):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    parts = callback.data.split("_")
+    consultation_id = int(parts[-2])
+    page = int(parts[-1])
+
+    result = await consultations.cancel_consultation(telegram_id, consultation_id)
+
+    if result == "success":
+        try:
+            await callback.message.delete()
+        except TelegramBadRequest:
+            pass
+        asyncio.create_task(answer_and_delete(callback.message, "✅ Консультация успешно отменена.", delay=5))
+        await show_main_menu(callback.message, role)
+    else:
+        await asyncio.sleep(0)
+        await show_cancel_page(callback, telegram_id, page=page)
+        await callback.answer("❌ Не удалось отменить консультацию. Попробуйте позже.", show_alert=True)
+        return
+
+    await state.clear()
+    await callback.answer()
+
 
 @router.callback_query(F.data == "teacher_create_consultation")
 async def start_create_consultation(callback: CallbackQuery, state: FSMContext):
