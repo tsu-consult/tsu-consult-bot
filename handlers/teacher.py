@@ -1,13 +1,17 @@
 from datetime import datetime
 
 from aiogram import Router, F
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, Message
 
+from keyboards.main_keyboard import show_main_menu
 from services.consultations import consultations
 from states.create_consultation import CreateConsultationFSM
 from utils.auth_utils import ensure_auth
 from utils.consultations_utils import format_date_verbose
+from utils.messages import answer_and_delete
+import asyncio
 
 router = Router()
 
@@ -22,6 +26,12 @@ async def start_create_consultation(callback: CallbackQuery, state: FSMContext):
 
     await state.clear()
     await state.set_state(CreateConsultationFSM.waiting_for_title)
+
+    try:
+        await callback.message.delete()
+    except TelegramBadRequest:
+        pass
+
     await callback.message.answer("Введите тему консультации 👇")
     await callback.answer()
 
@@ -59,7 +69,7 @@ async def handle_consultation_date(message: Message, state: FSMContext):
 def _parse_time(value: str) -> datetime | None:
     try:
         return datetime.strptime(value.strip(), "%H:%M")
-    except Exception:
+    except ValueError:
         return None
 
 
@@ -131,8 +141,18 @@ async def handle_consultation_max_students(message: Message, state: FSMContext):
 
 @router.callback_query(F.data == "cancel_create_consultation")
 async def cancel_create_consultation(callback: CallbackQuery, state: FSMContext):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
     await state.clear()
-    await callback.message.edit_text("❌ Создание консультации отменено.")
+
+    try:
+        await callback.message.delete()
+    except TelegramBadRequest:
+        pass
+
+    asyncio.create_task(answer_and_delete(callback.message, "❌ Создание консультации отменено.", delay=5))
+
+    await show_main_menu(callback.message, role)
     await callback.answer()
 
 
