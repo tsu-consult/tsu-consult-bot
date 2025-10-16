@@ -281,19 +281,50 @@ async def handle_request_description(message: Message, state: FSMContext):
         await message.answer("❗ Пожалуйста, введите описание запроса.")
         return
 
+    await state.update_data(description=description)
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Подписаться автоматически", callback_data="auto_subscribe_yes"),
+            InlineKeyboardButton(text="❌ Не подписываться", callback_data="auto_subscribe_no")
+        ]
+    ])
+    await message.answer(
+        "Хотите ли вы автоматически подписаться на этот запрос, чтобы получать уведомления о его статусе?",
+        reply_markup=keyboard
+    )
+    await state.set_state(CreateRequestFSM.waiting_for_subscription_choice)
+
+@router.callback_query(F.data.regexp(r"auto_subscribe_(yes|no)"))
+async def handle_auto_subscribe_choice(callback: CallbackQuery, state: FSMContext):
+    choice = callback.data.split("_")[-1]
+    auto_subscribe = choice == "yes"
+
     data = await state.get_data()
     title = data.get("title")
-    telegram_id = message.from_user.id
+    description = data.get("description")
+    telegram_id = callback.from_user.id
 
-    result = await consultations.create_request(telegram_id, title=title, description=description)
+    request_data = await consultations.create_request(telegram_id, title, description)
 
-    if result == "success":
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="back_to_main_menu")]
-        ])
-        await message.answer("✅ Ваш запрос на консультацию успешно создан!", reply_markup=keyboard)
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="back_to_main_menu")]
+    ])
+
+    if request_data:
+        request_id = request_data["id"]
+        if auto_subscribe:
+            await consultations.subscribe_request(telegram_id, request_id)
+
+        await callback.message.edit_text(
+            "✅ Ваш запрос на консультацию успешно создан!" +
+            (" Вы подписаны на обновления." if auto_subscribe else ""),
+            reply_markup=keyboard
+        )
+        await callback.answer()
     else:
-        await message.answer("❌ Не удалось создать запрос. Попробуйте позже.")
+        await callback.message.edit_text("❌ Не удалось создать запрос. Попробуйте позже.", reply_markup=keyboard)
+        await callback.answer()
 
     await state.clear()
 

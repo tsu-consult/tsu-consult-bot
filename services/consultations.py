@@ -98,7 +98,7 @@ class TSUConsultations:
             return False
 
     @staticmethod
-    async def create_request(telegram_id: int, title: str, description: str) -> str:
+    async def create_request(telegram_id: int, title: str, description: str) -> dict | None:
         auth.telegram_id = telegram_id
         await auth.init_redis()
         await auth.init_session()
@@ -117,18 +117,19 @@ class TSUConsultations:
                     headers={"Authorization": f"Bearer {auth.access_token}"}
             ) as resp:
                 if resp.status == 201:
-                    return "success"
+                    data = await resp.json()
+                    return data
                 else:
                     logger.error(
                         f"Error creating consultation request: HTTP {resp.status} - {await resp.text()}"
                     )
-                    return "error"
+                    return None
         except aiohttp.ClientError as e:
             logger.error(f"HTTP error creating consultation request: {e}")
-            return "error"
+            return None
         except Exception as e:
             logger.error(f"Unexpected error creating consultation request: {e}")
-            return "error"
+            return None
 
     @staticmethod
     async def get_requests(telegram_id: int, role: str, page: int = 1, page_size: int = 10) -> dict:
@@ -173,6 +174,33 @@ class TSUConsultations:
             logger.error(f"Unexpected error getting consultation requests: {e}")
             return {"count": 0, "total_pages": 0, "current_page": 0,
                     "next": None, "previous": None, "results": []}
+
+    @staticmethod
+    async def subscribe_request(telegram_id: int, request_id: int) -> bool:
+        auth.telegram_id = telegram_id
+        await auth.init_redis()
+        await auth.init_session()
+        if not (auth.access_token and auth.refresh_token):
+            await auth.load_tokens_if_needed()
+
+        try:
+            async with auth.session.post(
+                    f"{TSUConsultations.BASE_URL}consultations/requests/{request_id}/subscribe/",
+                    headers={"Authorization": f"Bearer {auth.access_token}"}
+            ) as resp:
+                if resp.status == 201 or resp.status == 200:
+                    return True
+                else:
+                    logger.error(
+                        f"Error subscribing to request {request_id}: HTTP {resp.status} - {await resp.text()}"
+                    )
+                    return False
+        except aiohttp.ClientError as e:
+            logger.error(f"HTTP error subscribing to request {request_id}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error subscribing to request {request_id}: {e}")
+            return False
 
 
 consultations = TSUConsultations()
