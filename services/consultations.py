@@ -43,7 +43,7 @@ class TSUConsultations:
             return "error"
 
     @staticmethod
-    async def get_consultations(telegram_id: int, page: int = 1, page_size: int = 10) -> dict:
+    async def get_consultations(telegram_id: int, page: int = 1, page_size: int = 10, is_closed: str | None = None) -> dict:
         auth.telegram_id = telegram_id
         await auth.init_redis()
         await auth.init_session()
@@ -51,7 +51,9 @@ class TSUConsultations:
             await auth.load_tokens_if_needed()
 
         try:
-            params = {"page": page, "page_size": page_size}
+            params: dict[str, str | int] = {"page": page, "page_size": page_size}
+            if is_closed is not None:
+                params["is_closed"] = "true" if is_closed else "false"
             async with auth.session.get(
                     f"{TSUConsultations.BASE_URL}consultations/my/",
                     params=params,
@@ -292,6 +294,32 @@ class TSUConsultations:
             return "error"
         except Exception as e:
             logger.error(f"Unexpected error cancelling consultation {consultation_id}: {e}")
+            return "error"
+
+    @staticmethod
+    async def close_consultation(telegram_id: int, consultation_id: int) -> str:
+        auth.telegram_id = telegram_id
+        await auth.init_redis()
+        await auth.init_session()
+        if not (auth.access_token and auth.refresh_token):
+            await auth.load_tokens_if_needed()
+        try:
+            async with auth.session.post(
+                f"{TSUConsultations.BASE_URL}consultations/{consultation_id}/close/",
+                headers={"Authorization": f"Bearer {auth.access_token}"}
+            ) as resp:
+                if resp.status in (200, 204):
+                    return "success"
+                else:
+                    logger.error(
+                        f"Error closing consultation {consultation_id}: HTTP {resp.status} - {await resp.text()}"
+                    )
+                    return "error"
+        except aiohttp.ClientError as e:
+            logger.error(f"HTTP error closing consultation {consultation_id}: {e}")
+            return "error"
+        except Exception as e:
+            logger.error(f"Unexpected error closing consultation {consultation_id}: {e}")
             return "error"
 
 
