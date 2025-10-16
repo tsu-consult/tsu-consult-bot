@@ -14,8 +14,7 @@ class TSUConsultations:
         auth.telegram_id = telegram_id
         await auth.init_redis()
         await auth.init_session()
-        if not (auth.access_token and auth.refresh_token):
-            await auth.load_tokens_if_needed()
+        await auth.load_tokens_if_needed()
 
         try:
             payload = {"message": request_text}
@@ -47,8 +46,7 @@ class TSUConsultations:
         auth.telegram_id = telegram_id
         await auth.init_redis()
         await auth.init_session()
-        if not (auth.access_token and auth.refresh_token):
-            await auth.load_tokens_if_needed()
+        await auth.load_tokens_if_needed()
 
         try:
             params = {"page": str(page), "page_size": str(page_size)}
@@ -85,8 +83,7 @@ class TSUConsultations:
         auth.telegram_id = telegram_id
         await auth.init_redis()
         await auth.init_session()
-        if not (auth.access_token and auth.refresh_token):
-            await auth.load_tokens_if_needed()
+        await auth.load_tokens_if_needed()
 
         try:
             async with auth.session.delete(
@@ -104,8 +101,7 @@ class TSUConsultations:
         auth.telegram_id = telegram_id
         await auth.init_redis()
         await auth.init_session()
-        if not (auth.access_token and auth.refresh_token):
-            await auth.load_tokens_if_needed()
+        await auth.load_tokens_if_needed()
 
         payload = {
             "title": title,
@@ -138,8 +134,7 @@ class TSUConsultations:
         auth.telegram_id = telegram_id
         await auth.init_redis()
         await auth.init_session()
-        if not (auth.access_token and auth.refresh_token):
-            await auth.load_tokens_if_needed()
+        await auth.load_tokens_if_needed()
 
         try:
             params = {"page": page, "page_size": page_size}
@@ -178,8 +173,7 @@ class TSUConsultations:
         auth.telegram_id = telegram_id
         await auth.init_redis()
         await auth.init_session()
-        if not (auth.access_token and auth.refresh_token):
-            await auth.load_tokens_if_needed()
+        await auth.load_tokens_if_needed()
 
         try:
             async with auth.session.post(
@@ -205,8 +199,7 @@ class TSUConsultations:
         auth.telegram_id = telegram_id
         await auth.init_redis()
         await auth.init_session()
-        if not (auth.access_token and auth.refresh_token):
-            await auth.load_tokens_if_needed()
+        await auth.load_tokens_if_needed()
 
         try:
             async with auth.session.delete(
@@ -239,8 +232,7 @@ class TSUConsultations:
         auth.telegram_id = telegram_id
         await auth.init_redis()
         await auth.init_session()
-        if not (auth.access_token and auth.refresh_token):
-            await auth.load_tokens_if_needed()
+        await auth.load_tokens_if_needed()
 
         payload = {
             "title": title,
@@ -281,8 +273,7 @@ class TSUConsultations:
         auth.telegram_id = telegram_id
         await auth.init_redis()
         await auth.init_session()
-        if not (auth.access_token and auth.refresh_token):
-            await auth.load_tokens_if_needed()
+        await auth.load_tokens_if_needed()
 
         payload = {
             "title": title,
@@ -317,8 +308,7 @@ class TSUConsultations:
         auth.telegram_id = telegram_id
         await auth.init_redis()
         await auth.init_session()
-        if not (auth.access_token and auth.refresh_token):
-            await auth.load_tokens_if_needed()
+        await auth.load_tokens_if_needed()
         try:
             async with auth.session.delete(
                 f"{TSUConsultations.BASE_URL}consultations/{consultation_id}/delete/",
@@ -341,8 +331,7 @@ class TSUConsultations:
         auth.telegram_id = telegram_id
         await auth.init_redis()
         await auth.init_session()
-        if not (auth.access_token and auth.refresh_token):
-            await auth.load_tokens_if_needed()
+        await auth.load_tokens_if_needed()
         try:
             async with auth.session.post(
                 f"{TSUConsultations.BASE_URL}consultations/{consultation_id}/close/",
@@ -367,8 +356,7 @@ class TSUConsultations:
         auth.telegram_id = telegram_id
         await auth.init_redis()
         await auth.init_session()
-        if not (auth.access_token and auth.refresh_token):
-            await auth.load_tokens_if_needed()
+        await auth.load_tokens_if_needed()
         try:
             async with auth.session.get(
                 f"{TSUConsultations.BASE_URL}consultations/{consultation_id}/students/",

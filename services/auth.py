@@ -21,6 +21,7 @@ class TSUAuth:
         self.access_token: Optional[str] = None
         self.refresh_token: Optional[str] = None
         self.telegram_id: Optional[int] = None
+        self._token_owner_id: Optional[int] = None
 
         self.access_ttl = getattr(config, "ACCESS_EXPIRES_IN", 300)
         self.refresh_ttl = getattr(config, "REFRESH_EXPIRES_IN", 86400)
@@ -52,16 +53,26 @@ class TSUAuth:
             headers["Authorization"] = f"Bearer {self.access_token}"
         return headers
 
+    async def _save_tokens_for(self, owner_id: int, access_token: Optional[str], refresh_token: Optional[str] = None):
+        if not self.redis_tokens or not owner_id or not access_token:
+            return
+        try:
+            await self.redis_tokens.setex(f"tsu_access:{owner_id}", self.access_ttl, access_token)
+            if refresh_token:
+                await self.redis_tokens.setex(f"tsu_refresh:{owner_id}", self.refresh_ttl, refresh_token)
+            logger.info(f"Tokens saved for telegram_id={owner_id}")
+            self.access_token = access_token
+            if refresh_token:
+                self.refresh_token = refresh_token
+            self._token_owner_id = owner_id
+            await self.set_login_flag(owner_id, True)
+        except Exception as e:
+            logger.error(f"Redis error (_save_tokens_for): {e}")
+
     async def _save_tokens(self):
         if not self.redis_tokens or not self.telegram_id or not self.access_token or not self.refresh_token:
             return
-        try:
-            await self.redis_tokens.setex(f"tsu_access:{self.telegram_id}", self.access_ttl, self.access_token)
-            await self.redis_tokens.setex(f"tsu_refresh:{self.telegram_id}", self.refresh_ttl, self.refresh_token)
-            logger.info(f"Tokens saved for telegram_id={self.telegram_id}")
-            await self.set_login_flag(self.telegram_id, True)
-        except Exception as e:
-            logger.error(f"Redis error (_save_tokens): {e}")
+        await self._save_tokens_for(self.telegram_id, self.access_token, self.refresh_token)
 
     async def _load_tokens(self) -> bool:
         if not self.redis_tokens or not self.telegram_id:
@@ -73,14 +84,19 @@ class TSUAuth:
                 self.access_token = access_token
                 self.refresh_token = refresh_token
                 logger.info(f"Tokens loaded for telegram_id={self.telegram_id}")
+                self._token_owner_id = self.telegram_id
                 await self.set_login_flag(self.telegram_id, True)
                 return True
+            else:
+                self.access_token = None
+                self.refresh_token = None
+                self._token_owner_id = None
         except Exception as e:
             logger.error(f"Redis error (_load_tokens): {e}")
         return False
 
     async def load_tokens_if_needed(self) -> bool:
-        if self.access_token and self.refresh_token:
+        if self.access_token and self.refresh_token and self._token_owner_id == self.telegram_id:
             return True
         return await self._load_tokens()
 
@@ -95,6 +111,7 @@ class TSUAuth:
                 logger.error(f"Redis error (_delete_tokens): {e}")
         self.access_token = None
         self.refresh_token = None
+        self._token_owner_id = None
 
     async def set_login_flag(self, telegram_id: int, value: bool):
         await self.init_redis()
@@ -113,9 +130,7 @@ class TSUAuth:
         self.telegram_id = telegram_id
         await self.init_redis()
         await self.init_session()
-
-        if not (self.access_token and self.refresh_token):
-            await self._load_tokens()
+        await self._load_tokens()
 
         try:
             response = await self.api_request("GET", "profile/")
@@ -133,9 +148,7 @@ class TSUAuth:
         self.telegram_id = telegram_id
         await self.init_redis()
         await self.init_session()
-
-        if not (self.access_token and self.refresh_token):
-            await self._load_tokens()
+        await self._load_tokens()
 
         try:
             response = await self.api_request("GET", "profile/")
@@ -154,21 +167,32 @@ class TSUAuth:
 
 
     async def api_request(self, method: str, endpoint: str, **kwargs):
-        await self._auto_refresh()
+        await self.load_tokens_if_needed()
         await self.init_session()
 
         url = f"{self.BASE_URL}{endpoint}"
         headers = kwargs.pop("headers", {})
-        headers.update(self._headers())
+        local_access = self.access_token
+        local_refresh = self.refresh_token
+        local_owner = self._token_owner_id
+
+        if local_access:
+            headers.update({"Authorization": f"Bearer {local_access}"})
+        headers.setdefault("Content-Type", "application/json")
 
         async with self.session.request(method, url, headers=headers, **kwargs) as resp:
             if resp.status in (204, 201):
                 return {}
-            if resp.status == 401 and self.refresh_token:
-                await self.refresh()
-                headers = self._headers()
-                async with self.session.request(method, url, headers=headers, **kwargs) as retry_resp:
-                    if resp.status in (204, 201):
+            if resp.status == 401 and local_refresh:
+                try:
+                    await self.refresh(local_refresh, owner_id=local_owner)
+                except Exception:
+                    pass
+                retry_headers = {"Content-Type": "application/json"}
+                if self.access_token:
+                    retry_headers["Authorization"] = f"Bearer {self.access_token}"
+                async with self.session.request(method, url, headers=retry_headers, **kwargs) as retry_resp:
+                    if retry_resp.status in (204, 201):
                         return {}
                     return await retry_resp.json()
             return await resp.json()
@@ -183,28 +207,29 @@ class TSUAuth:
                 await self._delete_tokens()
                 raise ValueError("User not registered")
             data = await resp.json()
-            self.access_token = data.get("access")
-            self.refresh_token = data.get("refresh")
-            await self._save_tokens()
+            access = data.get("access")
+            refresh = data.get("refresh")
+            await self._save_tokens_for(self.telegram_id, access, refresh)
             return data
 
     async def _auto_refresh(self):
         if self.access_token or not self.refresh_token:
             return
         logger.info(f"Access token missing or expired, refreshing for telegram_id={self.telegram_id}")
-        await self.refresh()
+        await self.refresh(self.refresh_token, owner_id=self._token_owner_id)
 
-    async def refresh(self):
-        if not self.refresh_token:
+    async def refresh(self, refresh_token: Optional[str] = None, owner_id: Optional[int] = None):
+        token_to_use = refresh_token or self.refresh_token
+        if not token_to_use:
             raise ValueError("No refresh_token for refresh")
         await self.init_session()
-        async with self.session.post(f"{self.BASE_URL}auth/refresh/", json={"refresh": self.refresh_token}) as resp:
+        async with self.session.post(f"{self.BASE_URL}auth/refresh/", json={"refresh": token_to_use}) as resp:
             if resp.status == 200:
                 data = await resp.json()
-                self.access_token = data.get("access")
-                await self._save_tokens()
+                new_access = data.get("access")
+                await self._save_tokens_for(owner_id or self.telegram_id, new_access)
             elif resp.status in (400, 404):
-                await self.login(self.telegram_id)
+                await self.login(owner_id or self.telegram_id)
             else:
                 raise ValueError(f"Error updating token: {resp.status}")
 
@@ -228,14 +253,16 @@ class TSUAuth:
                 data = await resp.text()
                 raise ValueError(f"Registration error: {data}")
             data = await resp.json()
-            self.access_token = data.get("access")
-            self.refresh_token = data.get("refresh")
-            await self._save_tokens()
+            access = data.get("access")
+            refresh = data.get("refresh")
+            await self._save_tokens_for(self.telegram_id, access, refresh)
             return data
 
     async def logout(self, telegram_id: int | None = None):
         if telegram_id:
             self.telegram_id = telegram_id
+
+        await self.load_tokens_if_needed()
 
         if not self.refresh_token:
             return
