@@ -130,5 +130,49 @@ class TSUConsultations:
             logger.error(f"Unexpected error creating consultation request: {e}")
             return "error"
 
+    @staticmethod
+    async def get_requests(telegram_id: int, role: str, page: int = 1, page_size: int = 10) -> dict:
+        auth.telegram_id = telegram_id
+        await auth.init_redis()
+        await auth.init_session()
+        if not (auth.access_token and auth.refresh_token):
+            await auth.load_tokens_if_needed()
+
+        try:
+            params = {"page": page, "page_size": page_size}
+            if role == "student":
+                params["student_id"] = telegram_id
+            elif role == "teacher":
+                params["teacher_id"] = telegram_id
+
+            async with auth.session.get(
+                    f"{TSUConsultations.BASE_URL}consultations/requests/",
+                    params=params,
+                    headers={"Authorization": f"Bearer {auth.access_token}"}
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return {
+                        "count": data.get("count", 0),
+                        "total_pages": data.get("total_pages", 0),
+                        "current_page": data.get("current_page", 0),
+                        "next": data.get("next"),
+                        "previous": data.get("previous"),
+                        "results": data.get("results", [])
+                    }
+                else:
+                    logger.error(f"Error getting consultation requests: HTTP {resp.status} - {await resp.text()}")
+                    return {"count": 0, "total_pages": 0, "current_page": 0,
+                            "next": None, "previous": None, "results": []}
+
+        except aiohttp.ClientError as e:
+            logger.error(f"HTTP error getting consultation requests: {e}")
+            return {"count": 0, "total_pages": 0, "current_page": 0,
+                    "next": None, "previous": None, "results": []}
+        except Exception as e:
+            logger.error(f"Unexpected error getting consultation requests: {e}")
+            return {"count": 0, "total_pages": 0, "current_page": 0,
+                    "next": None, "previous": None, "results": []}
+
 
 consultations = TSUConsultations()

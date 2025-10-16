@@ -3,10 +3,15 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardBut
 
 from services.consultations import consultations
 from utils.auth_utils import ensure_auth
-from utils.consultations_utils import format_time, format_date_verbose
+from utils.consultations_utils import format_time, format_date_verbose, format_datetime_verbose
 
 router = Router()
 PAGE_SIZE = 3
+STATUS_RU = {
+    "open": "Открыт",
+    "accepted": "Принят",
+    "closed": "Закрыт"
+}
 
 
 @router.callback_query(F.data.regexp(r"(student|teacher)_my_consultations(_\d+)?"))
@@ -81,6 +86,83 @@ async def view_my_consultations(callback: CallbackQuery):
 
     keyboard_rows.append([InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")])
 
+    keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
+
+    await callback.message.edit_text(
+        "\n".join(text_lines),
+        reply_markup=keyboard,
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "student_requests")
+async def view_requests(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if not role:
+        await callback.answer()
+        return
+
+    await show_requests_page(callback, telegram_id, role, page=1)
+
+
+@router.callback_query(F.data.regexp(r"(student|teacher)_requests_\d+"))
+async def paginate_requests(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if not role:
+        await callback.answer()
+        return
+
+    page = int(callback.data.split("_")[-1])
+    await show_requests_page(callback, telegram_id, role, page=page)
+
+
+async def show_requests_page(callback: CallbackQuery, telegram_id: int, role: str, page: int):
+    requests_page = await consultations.get_requests(telegram_id, role=role, page=page, page_size=PAGE_SIZE)
+
+    if not requests_page or not requests_page.get("results"):
+        await callback.message.edit_text("📄 Нет запросов на консультацию.")
+        await callback.answer()
+        return
+
+    current_page = requests_page.get("current_page", 1)
+    total_pages = max(requests_page.get("total_pages", 1), 1)
+
+    text_lines = [f"📄 <b>Запросы на консультацию — страница {current_page} из {total_pages}</b>"]
+
+    for r in requests_page["results"]:
+        student = r.get("student") or {}
+        student_name = f"{student.get('first_name', '')} {student.get('last_name', '')}".strip()
+        created_at = format_datetime_verbose(r.get("created_at"))
+        status_ru = STATUS_RU.get(r.get("status"), r.get("status", "—"))
+
+        text_lines.append(
+            f"\n<b>{r['title']}</b>\n"
+            f"{r['description']}\n"
+            f"👤 Студент: {student_name} ({student.get('username', '—')})\n"
+            f"📅 Создан: {created_at}\n"
+            f"📌 Статус: {status_ru}"
+        )
+
+    keyboard_rows = []
+
+    nav_row = []
+    if current_page > 1:
+        nav_row.append(InlineKeyboardButton(
+            text="⬅️ Назад",
+            callback_data=f"{role}_requests_{current_page - 1}"
+        ))
+    if current_page < total_pages:
+        nav_row.append(InlineKeyboardButton(
+            text="➡️ Вперёд",
+            callback_data=f"{role}_requests_{current_page + 1}"
+        ))
+    if nav_row:
+        keyboard_rows.append(nav_row)
+
+    keyboard_rows.append([InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")])
     keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
 
     await callback.message.edit_text(
