@@ -12,6 +12,7 @@ from keyboards.paginated_keyboard import build_paginated_keyboard
 from services.consultations import consultations
 from services.teachers import teachers
 from states.book_consultation import BookConsultation
+from states.create_request import CreateRequestFSM
 from utils.auth_utils import ensure_auth
 from utils.consultations_utils import format_time, format_date_verbose
 
@@ -246,6 +247,55 @@ async def cancel_booking(callback: CallbackQuery):
         await callback.answer("❌ Не удалось отменить запись. Попробуйте позже.", show_alert=True)
 
     await view_my_consultations(callback)
+
+
+@router.callback_query(F.data == "student_create_request")
+async def start_create_request(callback: CallbackQuery, state: FSMContext):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if not role:
+        await callback.answer()
+        return
+
+    await state.set_state(CreateRequestFSM.waiting_for_title)
+    await callback.message.answer("Введите тему вашего запроса на консультацию 👇")
+    await callback.answer()
+
+
+@router.message(CreateRequestFSM.waiting_for_title)
+async def handle_request_title(message: Message, state: FSMContext):
+    title = message.text.strip()
+    if not title:
+        await message.answer("❗ Пожалуйста, введите тему запроса.")
+        return
+
+    await state.update_data(title=title)
+    await state.set_state(CreateRequestFSM.waiting_for_description)
+    await message.answer("Теперь введите описание запроса 👇")
+
+
+@router.message(CreateRequestFSM.waiting_for_description)
+async def handle_request_description(message: Message, state: FSMContext):
+    description = message.text.strip()
+    if not description:
+        await message.answer("❗ Пожалуйста, введите описание запроса.")
+        return
+
+    data = await state.get_data()
+    title = data.get("title")
+    telegram_id = message.from_user.id
+
+    result = await consultations.create_request(telegram_id, title=title, description=description)
+
+    if result == "success":
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="back_to_main_menu")]
+        ])
+        await message.answer("✅ Ваш запрос на консультацию успешно создан!", reply_markup=keyboard)
+    else:
+        await message.answer("❌ Не удалось создать запрос. Попробуйте позже.")
+
+    await state.clear()
 
 
 

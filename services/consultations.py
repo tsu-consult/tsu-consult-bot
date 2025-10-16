@@ -97,5 +97,38 @@ class TSUConsultations:
             logger.error(f"Error cancelling consultation {consultation_id}: {e}")
             return False
 
+    @staticmethod
+    async def create_request(telegram_id: int, title: str, description: str) -> str:
+        auth.telegram_id = telegram_id
+        await auth.init_redis()
+        await auth.init_session()
+        if not (auth.access_token and auth.refresh_token):
+            await auth.load_tokens_if_needed()
+
+        payload = {
+            "title": title,
+            "description": description
+        }
+
+        try:
+            async with auth.session.post(
+                    f"{TSUConsultations.BASE_URL}consultations/request/",
+                    json=payload,
+                    headers={"Authorization": f"Bearer {auth.access_token}"}
+            ) as resp:
+                if resp.status == 201:
+                    return "success"
+                else:
+                    logger.error(
+                        f"Error creating consultation request: HTTP {resp.status} - {await resp.text()}"
+                    )
+                    return "error"
+        except aiohttp.ClientError as e:
+            logger.error(f"HTTP error creating consultation request: {e}")
+            return "error"
+        except Exception as e:
+            logger.error(f"Unexpected error creating consultation request: {e}")
+            return "error"
+
 
 consultations = TSUConsultations()

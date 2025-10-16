@@ -7,17 +7,14 @@ from services.auth import auth
 student_menu = types.InlineKeyboardMarkup(
     inline_keyboard=[
         [
-            types.InlineKeyboardButton(text="👨‍🏫 Преподаватели", callback_data="student_view_teachers")
+            types.InlineKeyboardButton(text="👨‍🏫 Преподаватели", callback_data="student_view_teachers"),
+            types.InlineKeyboardButton(text="📄 Запросы на консультацию", callback_data="student_requests")
         ],
         [
-            types.InlineKeyboardButton(text="🔔 Подписаться на преподавателя", callback_data="student_subscribe_teacher"),
             types.InlineKeyboardButton(text="📝 Создать запрос на консультацию", callback_data="student_create_request")
         ],
         [
-            types.InlineKeyboardButton(text="📄 Мои запросы на консультацию", callback_data="student_view_requests")
-        ],
-        [
-            types.InlineKeyboardButton(text="📅 Мои консультации", callback_data="student_my_consultations")
+            types.InlineKeyboardButton(text="📅 Мои консультации", callback_data="student_my_consultations"),
         ],
         [
             types.InlineKeyboardButton(text="👤 Профиль", callback_data="menu_profile"),
