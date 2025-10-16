@@ -162,10 +162,14 @@ class TSUAuth:
         headers.update(self._headers())
 
         async with self.session.request(method, url, headers=headers, **kwargs) as resp:
+            if resp.status in (204, 201):
+                return {}
             if resp.status == 401 and self.refresh_token:
                 await self.refresh()
                 headers = self._headers()
                 async with self.session.request(method, url, headers=headers, **kwargs) as retry_resp:
+                    if resp.status in (204, 201):
+                        return {}
                     return await retry_resp.json()
             return await resp.json()
 

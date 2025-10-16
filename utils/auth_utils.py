@@ -1,9 +1,10 @@
 ﻿from aiogram.types import Message, CallbackQuery, BotCommand, BotCommandScopeChat
-from handlers import register
+
+from keyboards.main_keyboard import show_main_menu
 from services.auth import auth
 
 
-async def ensure_auth(telegram_id: int, obj: Message | CallbackQuery, state=None) -> str | None:
+async def ensure_auth(telegram_id: int, obj: Message | CallbackQuery) -> str | None:
     role = await auth.get_role(telegram_id)
 
     if not role:
@@ -12,9 +13,9 @@ async def ensure_auth(telegram_id: int, obj: Message | CallbackQuery, state=None
             role = await auth.get_role(telegram_id)
         except ValueError:
             if isinstance(obj, CallbackQuery):
-                await register.start_registration(obj.message, state)
+                await show_main_menu(obj.message, role=None)
             else:
-                await register.start_registration(obj, state)
+                await show_main_menu(obj, role=None)
             return None
 
     if role:

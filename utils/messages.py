@@ -14,8 +14,10 @@ async def delete_msg(bot: Bot, chat_id: int, message_id: int | None):
         return
     try:
         await bot.delete_message(chat_id=chat_id, message_id=message_id)
-    except Exception:
+    except TelegramBadRequest:
         pass
+    except Exception as e:
+        logging.warning(f"Unable to delete message {message_id}: {e}")
 
 async def answer_and_delete(message: Message, text: str, delay: int = 5):
     msg = await message.answer(text, parse_mode=PARSE_MODE)
