@@ -362,7 +362,19 @@ async def teacher_show_students(callback: CallbackQuery):
             first_name = s.get("first_name") or s.get("student", {}).get("first_name", "")
             last_name = s.get("last_name") or s.get("student", {}).get("last_name", "")
             username = s.get("username") or s.get("student", {}).get("username", "—")
-            lines.append(f"{idx}. {first_name} {last_name} ({username})")
+            base = f"{idx}. {first_name} {last_name} ({username})".strip()
+            request_text = (
+                s.get("message")
+                or s.get("request_text")
+                or (s.get("student") or {}).get("message")
+                or (s.get("student") or {}).get("request_text")
+                or (s.get("request") or {}).get("message")
+                or (s.get("request") or {}).get("text")
+            )
+            if request_text:
+                lines.append(f"{base}\nЗапрос: {request_text}")
+            else:
+                lines.append(base)
         text = "\n".join(lines)
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
