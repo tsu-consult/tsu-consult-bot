@@ -202,5 +202,32 @@ class TSUConsultations:
             logger.error(f"Unexpected error subscribing to request {request_id}: {e}")
             return False
 
+    @staticmethod
+    async def unsubscribe_request(telegram_id: int, request_id: int) -> bool:
+        auth.telegram_id = telegram_id
+        await auth.init_redis()
+        await auth.init_session()
+        if not (auth.access_token and auth.refresh_token):
+            await auth.load_tokens_if_needed()
+
+        try:
+            async with auth.session.delete(
+                    f"{TSUConsultations.BASE_URL}consultations/requests/{request_id}/unsubscribe/",
+                    headers={"Authorization": f"Bearer {auth.access_token}"}
+            ) as resp:
+                if resp.status in (200, 204):
+                    return True
+                else:
+                    logger.error(
+                        f"Error unsubscribing from request {request_id}: HTTP {resp.status} - {await resp.text()}"
+                    )
+                    return False
+        except aiohttp.ClientError as e:
+            logger.error(f"HTTP error unsubscribing from request {request_id}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error unsubscribing from request {request_id}: {e}")
+            return False
+
 
 consultations = TSUConsultations()

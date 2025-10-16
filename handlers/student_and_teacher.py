@@ -157,6 +157,7 @@ async def choose_request_to_subscribe(callback: CallbackQuery):
     )
     await callback.answer()
 
+
 @router.callback_query(F.data.regexp(r"subscribe_request_\d+_\d+"))
 async def subscribe_to_request(callback: CallbackQuery):
     telegram_id = callback.from_user.id
@@ -174,6 +175,66 @@ async def subscribe_to_request(callback: CallbackQuery):
         await callback.answer("✅ Вы подписались на обновления запроса!", show_alert=True)
     else:
         await callback.answer("❌ Не удалось подписаться. Возможно, вы уже подписаны. Попробуйте позже.", show_alert=True)
+
+    await show_requests_page(callback, telegram_id, role, page=page)
+
+@router.callback_query(F.data.regexp(r"choose_request_unsubscribe_\d+"))
+async def choose_request_to_unsubscribe(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if not role:
+        await callback.answer()
+        return
+
+    page = int(callback.data.split("_")[-1])
+
+    requests_page = await consultations.get_requests(telegram_id, role=role, page=page, page_size=PAGE_SIZE)
+
+    if not requests_page or not requests_page.get("results"):
+        await callback.answer("❌ Нет запросов", show_alert=True)
+        return
+
+    keyboard_rows = []
+    for r in requests_page["results"]:
+        title = r.get("title", "Без названия")
+        status = STATUS_RU.get(r.get("status"), r.get("status", "—"))
+        keyboard_rows.append([
+            InlineKeyboardButton(
+                text=f"{title} — {status}",
+                callback_data=f"unsubscribe_request_{r['id']}_{page}"
+            )
+        ])
+
+    keyboard_rows.append([
+        InlineKeyboardButton(text="⬅️ Назад", callback_data=f"{role}_requests_{page}")
+    ])
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
+
+    await callback.message.edit_text(
+        "Выберите запрос, от которого хотите отписаться 👇",
+        reply_markup=keyboard
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.regexp(r"unsubscribe_request_\d+_\d+"))
+async def unsubscribe_from_request(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if not role:
+        await callback.answer()
+        return
+
+    _, _, request_id_str, page_str = callback.data.split("_")
+    request_id = int(request_id_str)
+    page = int(page_str)
+
+    success = await consultations.unsubscribe_request(telegram_id, request_id)
+    if success:
+        await callback.answer("✅ Вы отписались от обновлений запроса.", show_alert=True)
+    else:
+        await callback.answer("❌ Не удалось отписаться. Возможно, вы не были подписаны.", show_alert=True)
 
     await show_requests_page(callback, telegram_id, role, page=page)
 
@@ -222,7 +283,8 @@ async def show_requests_page(callback: CallbackQuery, telegram_id: int, role: st
         keyboard_rows.append(nav_row)
 
     keyboard_rows.append([
-        InlineKeyboardButton(text="🔔 Подписаться", callback_data=f"choose_request_subscribe_{current_page}")
+        InlineKeyboardButton(text="🔔 Подписаться", callback_data=f"choose_request_subscribe_{current_page}"),
+        InlineKeyboardButton(text="🔕 Отписаться", callback_data=f"choose_request_unsubscribe_{current_page}")
     ])
 
     keyboard_rows.append([InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")])
