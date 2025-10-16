@@ -12,8 +12,7 @@ class TSUProfile:
             await auth.init_redis()
             await auth.init_session()
 
-            if not (auth.access_token and auth.refresh_token):
-                await auth.load_tokens_if_needed()
+            await auth.load_tokens_if_needed()
 
             response = await auth.api_request("GET", "profile/")
             if not response or "role" not in response:
@@ -41,8 +40,7 @@ class TSUProfile:
             await auth.init_redis()
             await auth.init_session()
 
-            if not (auth.access_token and auth.refresh_token):
-                await auth.load_tokens_if_needed()
+            await auth.load_tokens_if_needed()
 
             payload = {
                 "first_name": first_name,
@@ -106,8 +104,7 @@ class TSUProfile:
             auth.telegram_id = telegram_id
             await auth.init_redis()
             await auth.init_session()
-            if not (auth.access_token and auth.refresh_token):
-                await auth.load_tokens_if_needed()
+            await auth.load_tokens_if_needed()
 
             response = await auth.api_request("POST", "profile/approval/resubmit/")
 
