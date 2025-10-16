@@ -4,7 +4,7 @@ from aiogram.types import BotCommand
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from config import BOT_TOKEN
-from handlers import start, register, logout, home, profile, student, student_and_teacher
+from handlers import start, register, logout, home, profile, student, student_and_teacher, teacher
 from services.auth import shutdown
 
 
@@ -19,6 +19,7 @@ async def main():
     dp.include_router(profile.router)
     dp.include_router(student.router)
     dp.include_router(student_and_teacher.router)
+    dp.include_router(teacher.router)
 
     await bot.set_my_commands([
         BotCommand(command="start", description="Начать")

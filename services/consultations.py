@@ -43,7 +43,7 @@ class TSUConsultations:
             return "error"
 
     @staticmethod
-    async def get_consultations(telegram_id: int, page: int = 1, page_size: int = 10) -> dict:
+    async def get_consultations(telegram_id: int, page: int = 1, page_size: int = 10, is_closed: bool | None = None) -> dict:
         auth.telegram_id = telegram_id
         await auth.init_redis()
         await auth.init_session()
@@ -51,7 +51,9 @@ class TSUConsultations:
             await auth.load_tokens_if_needed()
 
         try:
-            params = {"page": page, "page_size": page_size}
+            params = {"page": str(page), "page_size": str(page_size)}
+            if is_closed is not None:
+                params["is_closed"] = "true" if is_closed else "false"
             async with auth.session.get(
                     f"{TSUConsultations.BASE_URL}consultations/my/",
                     params=params,
@@ -132,7 +134,7 @@ class TSUConsultations:
             return None
 
     @staticmethod
-    async def get_requests(telegram_id: int, role: str, page: int = 1, page_size: int = 10) -> dict:
+    async def get_requests(telegram_id: int, page: int = 1, page_size: int = 10) -> dict:
         auth.telegram_id = telegram_id
         await auth.init_redis()
         await auth.init_session()
@@ -141,10 +143,6 @@ class TSUConsultations:
 
         try:
             params = {"page": page, "page_size": page_size}
-            if role == "student":
-                params["student_id"] = telegram_id
-            elif role == "teacher":
-                params["teacher_id"] = telegram_id
 
             async with auth.session.get(
                     f"{TSUConsultations.BASE_URL}consultations/requests/",
@@ -228,6 +226,171 @@ class TSUConsultations:
         except Exception as e:
             logger.error(f"Unexpected error unsubscribing from request {request_id}: {e}")
             return False
+
+    @staticmethod
+    async def create_consultation(
+        telegram_id: int,
+        title: str,
+        date: str,
+        start_time: str,
+        end_time: str,
+        max_students: int
+    ) -> dict | None:
+        auth.telegram_id = telegram_id
+        await auth.init_redis()
+        await auth.init_session()
+        if not (auth.access_token and auth.refresh_token):
+            await auth.load_tokens_if_needed()
+
+        payload = {
+            "title": title,
+            "date": date,
+            "start_time": start_time,
+            "end_time": end_time,
+            "max_students": max_students
+        }
+
+        try:
+            async with auth.session.post(
+                f"{TSUConsultations.BASE_URL}consultations/",
+                json=payload,
+                headers={"Authorization": f"Bearer {auth.access_token}"}
+            ) as resp:
+                if resp.status in (200, 201):
+                    return await resp.json()
+                else:
+                    logger.error(f"Error creating consultation: HTTP {resp.status} - {await resp.text()}")
+                    return None
+        except aiohttp.ClientError as e:
+            logger.error(f"HTTP error creating consultation: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error creating consultation: {e}")
+            return None
+
+    @staticmethod
+    async def create_consultation_from_request(
+            telegram_id: int,
+            request_id: int,
+            title: str,
+            date: str,
+            start_time: str,
+            end_time: str,
+            max_students: int
+    ) -> dict | None:
+        auth.telegram_id = telegram_id
+        await auth.init_redis()
+        await auth.init_session()
+        if not (auth.access_token and auth.refresh_token):
+            await auth.load_tokens_if_needed()
+
+        payload = {
+            "title": title,
+            "date": date,
+            "start_time": start_time,
+            "end_time": end_time,
+            "max_students": max_students,
+            "source_request_id": request_id
+        }
+
+        try:
+            async with auth.session.post(
+                    f"{TSUConsultations.BASE_URL}consultations/from/{request_id}/",
+                    json=payload,
+                    headers={"Authorization": f"Bearer {auth.access_token}"}
+            ) as resp:
+                if resp.status in (200, 201):
+                    return await resp.json()
+                else:
+                    logger.error(
+                        f"Error creating consultation from request {request_id}: HTTP {resp.status} - {await resp.text()}")
+                    return None
+        except aiohttp.ClientError as e:
+            logger.error(f"HTTP error creating consultation from request {request_id}: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error creating consultation from request {request_id}: {e}")
+            return None
+
+    @staticmethod
+    async def cancel_consultation(telegram_id: int, consultation_id: int) -> str:
+        auth.telegram_id = telegram_id
+        await auth.init_redis()
+        await auth.init_session()
+        if not (auth.access_token and auth.refresh_token):
+            await auth.load_tokens_if_needed()
+        try:
+            async with auth.session.delete(
+                f"{TSUConsultations.BASE_URL}consultations/{consultation_id}/delete/",
+                headers={"Authorization": f"Bearer {auth.access_token}"}
+            ) as resp:
+                if resp.status in (200, 204):
+                    return "success"
+                else:
+                    logger.error(f"Error cancelling consultation {consultation_id}: HTTP {resp.status} - {await resp.text()}")
+                    return "error"
+        except aiohttp.ClientError as e:
+            logger.error(f"HTTP error cancelling consultation {consultation_id}: {e}")
+            return "error"
+        except Exception as e:
+            logger.error(f"Unexpected error cancelling consultation {consultation_id}: {e}")
+            return "error"
+
+    @staticmethod
+    async def close_consultation(telegram_id: int, consultation_id: int) -> str:
+        auth.telegram_id = telegram_id
+        await auth.init_redis()
+        await auth.init_session()
+        if not (auth.access_token and auth.refresh_token):
+            await auth.load_tokens_if_needed()
+        try:
+            async with auth.session.post(
+                f"{TSUConsultations.BASE_URL}consultations/{consultation_id}/close/",
+                headers={"Authorization": f"Bearer {auth.access_token}"}
+            ) as resp:
+                if resp.status in (200, 204):
+                    return "success"
+                else:
+                    logger.error(
+                        f"Error closing consultation {consultation_id}: HTTP {resp.status} - {await resp.text()}"
+                    )
+                    return "error"
+        except aiohttp.ClientError as e:
+            logger.error(f"HTTP error closing consultation {consultation_id}: {e}")
+            return "error"
+        except Exception as e:
+            logger.error(f"Unexpected error closing consultation {consultation_id}: {e}")
+            return "error"
+
+    @staticmethod
+    async def get_consultation_students(telegram_id: int, consultation_id: int) -> list[dict]:
+        auth.telegram_id = telegram_id
+        await auth.init_redis()
+        await auth.init_session()
+        if not (auth.access_token and auth.refresh_token):
+            await auth.load_tokens_if_needed()
+        try:
+            async with auth.session.get(
+                f"{TSUConsultations.BASE_URL}consultations/{consultation_id}/students/",
+                headers={"Authorization": f"Bearer {auth.access_token}"}
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if isinstance(data, dict):
+                        return data.get("results", [])
+                    return data or []
+                else:
+                    logger.error(
+                        f"Error getting consultation students {consultation_id}: "
+                        f"HTTP {resp.status} - {await resp.text()}"
+                    )
+                    return []
+        except aiohttp.ClientError as e:
+            logger.error(f"HTTP error getting consultation students {consultation_id}: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Unexpected error getting consultation students {consultation_id}: {e}")
+            return []
 
 
 consultations = TSUConsultations()
