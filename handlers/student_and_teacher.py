@@ -384,7 +384,7 @@ async def create_consultation_from_request(callback: CallbackQuery, state: FSMCo
             f"❌ По запросу со статусом '{status}' нельзя создать консультацию — только по открытым запросам.",
             show_alert=True
         )
-        await show_main_menu(callback.message, role, callback.message)
+        await show_main_menu(callback, role, callback)
         return
 
     if not request_title:

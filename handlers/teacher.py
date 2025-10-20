@@ -134,7 +134,7 @@ async def teacher_confirm_cancel(callback: CallbackQuery, state: FSMContext):
 
     if result == "success":
         await callback.message.edit_text("✅ Консультация успешно отменена.")
-        await show_main_menu(callback.message, role)
+        await show_main_menu(callback, role)
     else:
         await asyncio.sleep(0)
         await show_cancel_page(callback, telegram_id, page=page)
@@ -281,7 +281,7 @@ async def cancel_create_consultation(callback: CallbackQuery, state: FSMContext)
 
     asyncio.create_task(answer_and_delete(callback.message, "❌ Создание консультации отменено.", delay=5))
 
-    await show_main_menu(callback.message, role)
+    await show_main_menu(callback, role)
     await callback.answer()
 
 
@@ -323,7 +323,7 @@ async def confirm_create_consultation(callback: CallbackQuery, state: FSMContext
 
     if result:
         await callback.message.edit_text("✅ Консультация успешно создана!")
-        await show_main_menu(callback.message, role)
+        await show_main_menu(callback, role)
     else:
         await callback.message.edit_text("❌ Не удалось создать консультацию. Попробуйте позже.")
 
@@ -446,7 +446,7 @@ async def teacher_confirm_close(callback: CallbackQuery):
 
     if result == "success":
         await callback.message.edit_text("🔒 Запись на консультацию закрыта.")
-        await show_main_menu(callback.message, role)
+        await show_main_menu(callback, role)
     else:
         await show_close_page(callback, telegram_id, page=page)
         await callback.answer("❌ Не удалось закрыть запись. Попробуйте позже.", show_alert=True)

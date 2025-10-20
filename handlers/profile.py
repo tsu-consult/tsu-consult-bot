@@ -87,5 +87,5 @@ async def menu_back_handler(callback: CallbackQuery, state: FSMContext):
         return
 
     await state.clear()
-    await show_main_menu(callback.message, role, edit_message=callback.message)
+    await show_main_menu(callback, role, edit_message=callback.message)
     await callback.answer()

@@ -36,7 +36,7 @@ async def back_to_main_menu(callback: CallbackQuery):
         await callback.answer()
         return
 
-    await show_main_menu(callback.message, role, edit_message=callback.message)
+    await show_main_menu(callback, role, edit_message=callback.message)
     await callback.answer()
 
 
