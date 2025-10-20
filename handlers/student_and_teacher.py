@@ -38,7 +38,12 @@ async def view_my_consultations(callback: CallbackQuery):
     )
 
     if not consultations_page or not consultations_page.get("results"):
-        await callback.message.edit_text("📅 У вас пока нет консультаций.")
+        await callback.message.edit_text(
+            "📅 У вас пока нет консультаций.",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[[InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")]]
+            )
+        )
         await callback.answer()
         return
 
@@ -384,7 +389,7 @@ async def create_consultation_from_request(callback: CallbackQuery, state: FSMCo
             f"❌ По запросу со статусом '{status}' нельзя создать консультацию — только по открытым запросам.",
             show_alert=True
         )
-        await show_main_menu(callback, role, callback)
+        await show_main_menu(callback, role, callback.message)
         return
 
     if not request_title:

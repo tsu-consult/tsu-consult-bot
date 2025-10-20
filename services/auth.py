@@ -180,8 +180,11 @@ class TSUAuth:
         async with self.session.request(method, url, headers=headers, **kwargs) as resp:
             if resp.status == 204:
                 return {}
-            if resp.status == 201:
-                return await resp.json()
+            if resp.status in (200, 201):
+                try:
+                    return await resp.json()
+                except Exception:
+                    return {}
             if resp.status == 401 and local_refresh:
                 try:
                     await self.refresh(local_refresh, owner_id=local_owner)
@@ -193,10 +196,19 @@ class TSUAuth:
                 async with self.session.request(method, url, headers=retry_headers, **kwargs) as retry_resp:
                     if retry_resp.status == 204:
                         return {}
-                    if retry_resp.status == 201:
+                    if retry_resp.status in (200, 201):
+                        try:
+                            return await retry_resp.json()
+                        except Exception:
+                            return {}
+                    try:
                         return await retry_resp.json()
-                    return await retry_resp.json()
-            return await resp.json()
+                    except Exception:
+                        return {}
+            try:
+                return await resp.json()
+            except Exception:
+                return {}
 
     async def api_request_with_status(self, method: str, endpoint: str, **kwargs) -> tuple[int, dict | list | str | None]:
         await self.load_tokens_if_needed()
