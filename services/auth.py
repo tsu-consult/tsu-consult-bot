@@ -164,8 +164,6 @@ class TSUAuth:
 
         return "", ""
 
-
-
     async def api_request(self, method: str, endpoint: str, **kwargs):
         await self.load_tokens_if_needed()
         await self.init_session()
@@ -175,14 +173,15 @@ class TSUAuth:
         local_access = self.access_token
         local_refresh = self.refresh_token
         local_owner = self._token_owner_id
-
         if local_access:
             headers.update({"Authorization": f"Bearer {local_access}"})
         headers.setdefault("Content-Type", "application/json")
 
         async with self.session.request(method, url, headers=headers, **kwargs) as resp:
-            if resp.status in (204, 201):
+            if resp.status == 204:
                 return {}
+            if resp.status == 201:
+                return await resp.json()
             if resp.status == 401 and local_refresh:
                 try:
                     await self.refresh(local_refresh, owner_id=local_owner)
@@ -192,10 +191,55 @@ class TSUAuth:
                 if self.access_token:
                     retry_headers["Authorization"] = f"Bearer {self.access_token}"
                 async with self.session.request(method, url, headers=retry_headers, **kwargs) as retry_resp:
-                    if retry_resp.status in (204, 201):
+                    if retry_resp.status == 204:
                         return {}
+                    if retry_resp.status == 201:
+                        return await retry_resp.json()
                     return await retry_resp.json()
             return await resp.json()
+
+    async def api_request_with_status(self, method: str, endpoint: str, **kwargs) -> tuple[int, dict | list | str | None]:
+        await self.load_tokens_if_needed()
+        await self.init_session()
+
+        url = f"{self.BASE_URL}{endpoint}"
+        headers = kwargs.pop("headers", {})
+        local_access = self.access_token
+        local_refresh = self.refresh_token
+        local_owner = self._token_owner_id
+        if local_access:
+            headers.update({"Authorization": f"Bearer {local_access}"})
+        headers.setdefault("Content-Type", "application/json")
+
+        async with self.session.request(method, url, headers=headers, **kwargs) as resp:
+            status = resp.status
+            if status == 204:
+                return status, {}
+            if status in (200, 201):
+                try:
+                    return status, await resp.json()
+                except Exception:
+                    return status, None
+            if status == 401 and local_refresh:
+                try:
+                    await self.refresh(local_refresh, owner_id=local_owner)
+                except Exception:
+                    return status, await resp.text()
+                retry_headers = {"Content-Type": "application/json"}
+                if self.access_token:
+                    retry_headers["Authorization"] = f"Bearer {self.access_token}"
+                async with self.session.request(method, url, headers=retry_headers, **kwargs) as retry_resp:
+                    retry_status = retry_resp.status
+                    if retry_status == 204:
+                        return retry_status, {}
+                    try:
+                        return retry_status, await retry_resp.json()
+                    except Exception:
+                        return retry_status, await retry_resp.text()
+            try:
+                return status, await resp.json()
+            except Exception:
+                return status, await resp.text()
 
     async def login(self, telegram_id: int):
         self.telegram_id = telegram_id
