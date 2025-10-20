@@ -126,7 +126,7 @@ async def choose_consultation(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         "Выберите консультацию, на которую хотите записаться 👇\n\n"
         "Если нужной консультации нет на этой странице — "
-        "перейдите на другую страницу расписания с помощью кнопкок ⬅️ Назад / ➡️ Вперёд.",
+        "перейдите на другую страницу расписания с помощью кнопок ⬅️ Назад / ➡️ Вперёд.",
         reply_markup=keyboard
     )
     await callback.answer()
@@ -336,7 +336,28 @@ async def show_schedule_page(callback: CallbackQuery, telegram_id: int, teacher_
     is_subscribed = any(t["id"] == teacher_id for t in subscribed_teachers)
 
     if not page_data["results"]:
-        await callback.message.edit_text("📅 У этого преподавателя пока нет консультаций.")
+        text = (
+            "📅 У этого преподавателя пока нет консультаций.\n\n"
+            "Вы можете подписаться на уведомления о новых консультациях."
+        )
+        keyboard_rows = []
+        action_row = []
+        if is_subscribed:
+            action_row.append(InlineKeyboardButton(
+                text="🚫 Отписаться",
+                callback_data=f"unsubscribe_{teacher_id}"
+            ))
+        else:
+            action_row.append(InlineKeyboardButton(
+                text="🔔 Подписаться",
+                callback_data=f"subscribe_{teacher_id}"
+            ))
+        keyboard_rows.append(action_row)
+        keyboard_rows.append([
+            InlineKeyboardButton(text="🔙 Назад к преподавателям", callback_data="student_view_teachers")
+        ])
+        keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
+        await callback.message.edit_text(text, reply_markup=keyboard)
         await callback.answer()
         return
 
