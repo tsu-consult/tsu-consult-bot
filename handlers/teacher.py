@@ -25,7 +25,10 @@ async def show_cancel_page(callback: CallbackQuery, telegram_id: int, page: int)
     current_page = page_data.get("current_page", page)
     total_pages = max(page_data.get("total_pages", 1), 1)
 
-    text = f"Выберите консультацию, которую хотите отменить 👇\n\nСтраница {current_page} из {total_pages}"
+    if not results:
+        text = "Сейчас у вас нет активных консультаций, которые можно отменить."
+    else:
+        text = f"Выберите консультацию, которую хотите отменить 👇\n\nСтраница {current_page} из {total_pages}"
 
     keyboard_rows: list[list[InlineKeyboardButton]] = []
     for c in results:
@@ -40,12 +43,12 @@ async def show_cancel_page(callback: CallbackQuery, telegram_id: int, page: int)
         ])
 
     nav_row = []
-    if current_page > 1:
+    if results and current_page > 1:
         nav_row.append(InlineKeyboardButton(
             text="⬅️ Назад",
             callback_data=f"teacher_cancel_consultation_{current_page - 1}"
         ))
-    if current_page < total_pages:
+    if results and current_page < total_pages:
         nav_row.append(InlineKeyboardButton(
             text="➡️ Вперёд",
             callback_data=f"teacher_cancel_consultation_{current_page + 1}"
@@ -337,7 +340,11 @@ async def show_close_page(callback: CallbackQuery, telegram_id: int, page: int):
     current_page = page_data.get("current_page", page)
     total_pages = max(page_data.get("total_pages", 1), 1)
 
-    text = f"Выберите консультацию, которую хотите закрыть для записи 👇\n\nСтраница {current_page} из {total_pages}"
+    # Если нет консультаций для закрытия — показываем понятный текст
+    if not results:
+        text = "Сейчас у вас нет консультаций, доступных для закрытия записи."
+    else:
+        text = f"Выберите консультацию, которую хотите закрыть для записи 👇\n\nСтраница {current_page} из {total_pages}"
 
     keyboard_rows: list[list[InlineKeyboardButton]] = []
     for c in results:
@@ -352,12 +359,12 @@ async def show_close_page(callback: CallbackQuery, telegram_id: int, page: int):
         ])
 
     nav_row = []
-    if current_page > 1:
+    if results and current_page > 1:
         nav_row.append(InlineKeyboardButton(
             text="⬅️ Назад",
             callback_data=f"teacher_close_consultation_{current_page - 1}"
         ))
-    if current_page < total_pages:
+    if results and current_page < total_pages:
         nav_row.append(InlineKeyboardButton(
             text="➡️ Вперёд",
             callback_data=f"teacher_close_consultation_{current_page + 1}"
