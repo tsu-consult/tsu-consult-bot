@@ -1,5 +1,8 @@
-﻿from datetime import datetime
+﻿from datetime import datetime, timezone, timedelta
 from babel.dates import format_date
+
+TOMSK_TZ = timezone(timedelta(hours=7))
+
 
 def convert_12_to_24(time_str: str) -> str:
     if not time_str:
@@ -31,8 +34,9 @@ def format_date_verbose(date_str: str) -> str:
 def format_datetime_verbose(datetime_str: str) -> str:
     try:
         dt = datetime.fromisoformat(datetime_str.replace("Z", "+00:00"))
-        date_part = format_date_verbose(dt.strftime("%Y-%m-%d"))
-        time_part = convert_12_to_24(dt.strftime("%I:%M %p"))
-        return f"{date_part}, {time_part}"
+        dt_tomsk = dt.astimezone(TOMSK_TZ)
+        date_part = format_date(dt_tomsk, format="EEEE, d MMMM, y", locale="ru")
+        time_part = dt_tomsk.strftime("%H:%M")
+        return f"{date_part[0].upper() + date_part[1:]}, {time_part}"
     except (ValueError, TypeError):
         return datetime_str or "—"

@@ -20,7 +20,7 @@ PAGE_SIZE = 3
 
 
 async def show_cancel_page(callback: CallbackQuery, telegram_id: int, page: int):
-    page_data = await consultations.get_consultations(telegram_id, page=page, page_size=PAGE_SIZE, is_closed=False)
+    page_data = await consultations.get_consultations(telegram_id, page=page, page_size=PAGE_SIZE)
     results = page_data.get("results", [])
     current_page = page_data.get("current_page", page)
     total_pages = max(page_data.get("total_pages", 1), 1)
@@ -141,7 +141,7 @@ async def teacher_confirm_cancel(callback: CallbackQuery, state: FSMContext):
     else:
         await asyncio.sleep(0)
         await show_cancel_page(callback, telegram_id, page=page)
-        await callback.answer("❌ Не удалось отменить консультацию. Попробуйте позже.", show_alert=True)
+        await callback.answer("❌ Не удалось отменить консультацию. Возможно, она уже отмененна. Попробуйте позже.", show_alert=True)
         return
 
     await state.clear()
@@ -340,7 +340,6 @@ async def show_close_page(callback: CallbackQuery, telegram_id: int, page: int):
     current_page = page_data.get("current_page", page)
     total_pages = max(page_data.get("total_pages", 1), 1)
 
-    # Если нет консультаций для закрытия — показываем понятный текст
     if not results:
         text = "Сейчас у вас нет консультаций, доступных для закрытия записи."
     else:
