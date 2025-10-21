@@ -29,12 +29,12 @@ class TSUAuth:
     async def init_redis(self):
         if self.redis_tokens is None:
             self.redis_tokens = aioredis.from_url(
-                f"redis://{config.REDIS_HOST}:{config.REDIS_PORT}/{config.REDIS_DB}",
+                f"redis://:{config.REDIS_PASSWORD}@{config.REDIS_HOST}:{config.REDIS_PORT}/{config.REDIS_DB}",
                 decode_responses=True
             )
         if self.redis_flags is None:
             self.redis_flags = aioredis.from_url(
-                f"redis://{config.REDIS_HOST}:{config.REDIS_PORT}/{config.REDIS_DB + 1}",
+                f"redis://:{config.REDIS_PASSWORD}@{config.REDIS_HOST}:{config.REDIS_PORT}/{config.REDIS_DB + 1}",
                 decode_responses=True
             )
 
