@@ -66,7 +66,7 @@ jobs:
             echo "🚀 Launch new bot container..."
             docker run -d \
               --name tsu-consult-bot \
-              --env-file /home/${{ env.DEPLOY_USERNAME }}/tsu-bot.env \
+              --env-file /home/${{ env.DEPLOY_USERNAME }}/tsu-consult/tsu-bot.env \
               --network ${{ env.DEPLOY_USERNAME }}_tsu-consult_net \
               ${{ env.DOCKER_IMAGE }}:latest
 
@@ -83,6 +83,6 @@ jobs:
             docker rm tsu-consult-bot || true
             docker run -d \
               --name tsu-consult-bot \
-              --env-file /home/${{ env.DEPLOY_USERNAME }}/tsu-bot.env \
+              --env-file /home/${{ env.DEPLOY_USERNAME }}/tsu-consult/tsu-bot.env \
               --network ${{ env.DEPLOY_USERNAME }}_tsu-consult_net \
               tsu-consult-bot-backup
