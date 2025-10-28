@@ -3,10 +3,13 @@
 
 def available_sections(role: str | None, teacher_status: str | None = None) -> list[tuple[str, str]]:
     sections = []
-    if role != "teacher":
-        sections.append(("student", "📘 Руководство пользователя"))
-    if role == "teacher" and teacher_status == "active":
-        sections.append(("teacher", "📗 Руководство пользователя"))
+    if role is None:
+        sections.append(("guest", "👋 Руководство пользователя"))
+    else:
+        if role != "teacher":
+            sections.append(("student", "📘 Руководство пользователя"))
+        if role == "teacher" and teacher_status == "active":
+            sections.append(("teacher", "📗 Руководство пользователя"))
     sections.append(("faq", "❓ Частые вопросы (FAQ)"))
     return sections
 
