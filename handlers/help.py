@@ -90,6 +90,24 @@ async def help_section_callback(callback: CallbackQuery):
 @router.callback_query(F.data == "help_back")
 async def help_back_callback(callback: CallbackQuery):
     telegram_id = callback.from_user.id
+    logger.info(f"help_back called by {telegram_id}, data={callback.data}")
+    role = await auth.get_role(telegram_id)
+    teacher_status = None
+    if role == "teacher":
+        teacher_status = await profile.get_teacher_status(telegram_id)
+
+    kb = await make_help_menu(role, teacher_status)
+    try:
+        await callback.message.edit_text("❓ Справка — выберите раздел:", reply_markup=kb, parse_mode="HTML")
+    except Exception:
+        await callback.message.answer("❓ Справка — выберите раздел:", reply_markup=kb, parse_mode="HTML")
+    await callback.answer()
+
+
+@router.callback_query(F.data == "help_to_main")
+async def help_to_main_callback(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    logger.info(f"help_to_main called by {telegram_id}, data={callback.data}")
     role = await auth.get_role(telegram_id)
 
     await show_main_menu(callback, role, edit_message=callback.message)

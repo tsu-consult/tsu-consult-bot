@@ -9,7 +9,7 @@ async def available_sections(role: str | None, teacher_status: str | None = None
 async def make_help_menu(role: str | None, teacher_status: str | None = None) -> types.InlineKeyboardMarkup:
     sections = await available_sections(role, teacher_status)
     buttons = [types.InlineKeyboardButton(text=title, callback_data=f"help_section:{key}") for key, title in sections]
-    buttons.append(types.InlineKeyboardButton(text="🔙 Назад в меню", callback_data="help_back"))
+    buttons.append(types.InlineKeyboardButton(text="🔙 В главное меню", callback_data="help_to_main"))
     kb = types.InlineKeyboardMarkup(inline_keyboard=[[b] for b in buttons])
     return kb
 
@@ -28,7 +28,7 @@ async def make_help_page(role: str | None, current_key: str, teacher_status: str
     if idx < len(keys) - 1:
         nav_buttons.append(types.InlineKeyboardButton(text="Вперёд ➡️", callback_data=f"help_section:{keys[idx+1]}"))
 
-    back_btn = types.InlineKeyboardButton(text="🔙 Назад в меню", callback_data="help_back")
+    back_btn = types.InlineKeyboardButton(text="🔙 Назад к разделам", callback_data="help_back")
 
     inline_keyboard: list[list[types.InlineKeyboardButton]] = []
     if nav_buttons:
@@ -55,7 +55,7 @@ async def make_help_flow_keyboard(scenario: str, step: int, max_steps: int) -> t
     if step < max_steps:
         buttons.append(types.InlineKeyboardButton(text="Далее ➡️", callback_data=f"help_flow:{scenario}:{step+1}"))
 
-    footer = types.InlineKeyboardButton(text="🔙 Назад в меню", callback_data="help_back")
+    footer = types.InlineKeyboardButton(text="🔙 Назад к разделам", callback_data="help_back")
 
     inline_keyboard: list[list[types.InlineKeyboardButton]] = []
     if buttons:
