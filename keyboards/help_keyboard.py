@@ -57,6 +57,7 @@ async def make_help_page(role: str | None, current_key: str, teacher_status: str
         preferred_order = [
             "teacher_registration",
             "teacher_create_slots",
+            "teacher_close_cancel",
             "teacher_view_students",
             "teacher_requests",
             "teacher_main_menu",
