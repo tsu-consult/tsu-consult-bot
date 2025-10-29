@@ -48,6 +48,18 @@ async def make_help_page(role: str | None, current_key: str, teacher_status: str
             title = prefix.replace("_", " ").capitalize()
         step_scenarios.append((prefix, title))
 
+    preferred_order = ["booking", "cancel_booking", "create_request", "subscribe", "notifications", "navigation"]
+    ordered: list[tuple[str, str]] = []
+    for p in preferred_order:
+        for item in step_scenarios:
+            if item[0] == p:
+                ordered.append(item)
+                break
+    for item in step_scenarios:
+        if item not in ordered:
+            ordered.append(item)
+    step_scenarios = ordered
+
     if current_key == "student" and step_scenarios:
         for sc_key, sc_title in step_scenarios:
             inline_keyboard.append([types.InlineKeyboardButton(text=f"{sc_title}", callback_data=f"help_flow:{sc_key}:1")])
