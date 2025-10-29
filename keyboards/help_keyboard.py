@@ -36,7 +36,12 @@ async def make_help_page(role: str | None, current_key: str, teacher_status: str
                 prefix = k.split("_step_")[0]
                 step_prefixes.add(prefix)
 
-    for prefix in sorted(step_prefixes):
+    if current_key == "teacher":
+        candidate_prefixes = sorted([p for p in step_prefixes if p.startswith("teacher_")])
+    else:
+        candidate_prefixes = sorted([p for p in step_prefixes if not p.startswith("teacher_")])
+
+    for prefix in candidate_prefixes:
         raw_title = content.get(prefix)
         if raw_title:
             first_line = raw_title.splitlines()[0].strip()
@@ -48,7 +53,17 @@ async def make_help_page(role: str | None, current_key: str, teacher_status: str
             title = prefix.replace("_", " ").capitalize()
         step_scenarios.append((prefix, title))
 
-    preferred_order = ["booking", "cancel_booking", "create_request", "subscribe", "notifications", "navigation"]
+    if current_key == "teacher":
+        preferred_order = [
+            "teacher_registration",
+            "teacher_create_slots",
+            "teacher_view_students",
+            "teacher_requests",
+            "teacher_main_menu",
+        ]
+    else:
+        preferred_order = ["subscribe", "notifications", "navigation"]
+
     ordered: list[tuple[str, str]] = []
     for p in preferred_order:
         for item in step_scenarios:
@@ -60,9 +75,9 @@ async def make_help_page(role: str | None, current_key: str, teacher_status: str
             ordered.append(item)
     step_scenarios = ordered
 
-    if current_key == "student" and step_scenarios:
+    if current_key in ("student", "teacher") and step_scenarios:
         for sc_key, sc_title in step_scenarios:
-            inline_keyboard.append([types.InlineKeyboardButton(text=f"{sc_title}", callback_data=f"help_flow:{sc_key}:1")])
+            inline_keyboard.append([types.InlineKeyboardButton(text=f"{sc_title}", callback_data=f"help_flow:{sc_key}:1:{current_key}")])
 
     inline_keyboard.append([back_btn])
 
@@ -70,15 +85,15 @@ async def make_help_page(role: str | None, current_key: str, teacher_status: str
     return kb
 
 
-async def make_help_flow_keyboard(scenario: str, step: int, max_steps: int) -> types.InlineKeyboardMarkup:
+async def make_help_flow_keyboard(scenario: str, step: int, max_steps: int, origin: str = "student") -> types.InlineKeyboardMarkup:
     buttons: list[types.InlineKeyboardButton] = []
 
     if step > 1:
-        buttons.append(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"help_flow:{scenario}:{step-1}"))
+        buttons.append(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"help_flow:{scenario}:{step-1}:{origin}"))
     if step < max_steps:
-        buttons.append(types.InlineKeyboardButton(text="Далее ➡️", callback_data=f"help_flow:{scenario}:{step+1}"))
+        buttons.append(types.InlineKeyboardButton(text="Далее ➡️", callback_data=f"help_flow:{scenario}:{step+1}:{origin}"))
 
-    footer = types.InlineKeyboardButton(text="🔙 Назад в руководство", callback_data="help_section:student")
+    footer = types.InlineKeyboardButton(text="🔙 Назад в руководство", callback_data=f"help_section:{origin}")
 
     inline_keyboard: list[list[types.InlineKeyboardButton]] = []
     if buttons:

@@ -95,7 +95,7 @@ async def help_to_main_callback(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data.regexp(r"help_flow:([a-z_]+):(\d+)$"))
+@router.callback_query(F.data.regexp(r"help_flow:([a-z_]+):(\d+)(?::([a-z_]+))?$") )
 async def help_flow_callback(callback: CallbackQuery):
     telegram_id = callback.from_user.id
     logger.info(f"help_flow_callback called by {telegram_id}, data={callback.data}")
@@ -105,10 +105,11 @@ async def help_flow_callback(callback: CallbackQuery):
         teacher_status = await profile.get_teacher_status(telegram_id)
 
     parts = callback.data.split(":")
-    if len(parts) != 3:
+    if len(parts) < 3:
         await callback.answer()
         return
-    _, scenario, step_str = parts
+    _, scenario, step_str, *rest = parts
+    origin = rest[0] if rest else "student"
     try:
         step = int(step_str)
     except ValueError:
@@ -152,7 +153,7 @@ async def help_flow_callback(callback: CallbackQuery):
         if not text:
             text = "❌ Инструкция недоступна."
 
-        kb = await make_help_flow_keyboard(scenario, step, max_steps)
+        kb = await make_help_flow_keyboard(scenario, step, max_steps, origin=origin)
 
         try:
             await callback.message.edit_text(text + "\n\n" + (content.get("help_footer", "")), reply_markup=kb, parse_mode="HTML")
