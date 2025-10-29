@@ -1,16 +1,58 @@
-﻿from aiogram import Router, F
-from aiogram.types import CallbackQuery
-import logging
+﻿import logging
 
-from services.auth import auth
-from services.profile import profile
-from services.help_content import help_content
+from aiogram import Router, F
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+
 from keyboards.help_keyboard import make_help_menu, make_help_page, make_help_flow_keyboard
 from keyboards.main_keyboard import show_main_menu
+from services.help_content import help_content
+from services.profile import profile
 from utils.auth_utils import ensure_auth
 
 router = Router()
 logger = logging.getLogger(__name__)
+
+@router.callback_query(F.data == "guest_faq")
+async def guest_faq(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    logger.info(f"guest_faq called by {telegram_id}")
+
+    try:
+        text = await help_content.get_section_text("faq")
+        if not text:
+            text = "❌ Раздел FAQ временно недоступен."
+        
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="🔙 В главное меню", callback_data="guest_to_main")]
+            ]
+        )
+
+        await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+        await callback.answer()
+    except Exception as e:
+        logger.exception(f"Error in guest_faq: {e}")
+        await callback.answer("❌ Не удалось открыть раздел справки.", show_alert=True)
+
+@router.callback_query(F.data == "guest_to_main")
+async def guest_to_main(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    logger.info(f"guest_to_main called by {telegram_id}")
+
+    greeting = "👋 Привет!\n\nЧтобы продолжить, зарегистрируйтесь или войдите в систему 👇"
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔑 Регистрация / Вход", callback_data="start")],
+            [InlineKeyboardButton(text="❓ Справка", callback_data="guest_faq")],
+        ]
+    )
+
+    try:
+        await callback.message.edit_text(greeting, reply_markup=kb)
+    except Exception:
+        await callback.message.answer(greeting, reply_markup=kb)
+
+    await callback.answer()
 
 
 @router.callback_query(F.data == "menu_help")
