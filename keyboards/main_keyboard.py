@@ -67,9 +67,6 @@ guest_menu = types.InlineKeyboardMarkup(
         [
             types.InlineKeyboardButton(text="🔑 Регистрация / Вход", callback_data="start")
         ],
-        [
-            types.InlineKeyboardButton(text="❓ Справка", callback_data="menu_help")
-        ]
     ]
 )
 
