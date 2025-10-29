@@ -33,7 +33,33 @@ async def make_help_page(role: str | None, current_key: str, teacher_status: str
     inline_keyboard: list[list[types.InlineKeyboardButton]] = []
     if nav_buttons:
         inline_keyboard.append(nav_buttons)
+    
+    raw = await help_content.get_raw()
+    content = raw.get("content", {})
+    step_prefix = f"{current_key}_step_"
+    has_steps = any(k.startswith(step_prefix) for k in content.keys())
+    if has_steps:
+        inline_keyboard.append([types.InlineKeyboardButton(text="📖 Пошаговая инструкция", callback_data=f"help_flow:{current_key}:1")])
+
     inline_keyboard.append([back_btn])
 
     kb = types.InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
     return kb
+
+
+async def make_help_flow_keyboard(scenario: str, step: int, max_steps: int) -> types.InlineKeyboardMarkup:
+    buttons: list[types.InlineKeyboardButton] = []
+
+    if step > 1:
+        buttons.append(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"help_flow:{scenario}:{step-1}"))
+    if step < max_steps:
+        buttons.append(types.InlineKeyboardButton(text="Далее ➡️", callback_data=f"help_flow:{scenario}:{step+1}"))
+
+    footer = types.InlineKeyboardButton(text="🔙 Назад в меню", callback_data="help_back")
+
+    inline_keyboard: list[list[types.InlineKeyboardButton]] = []
+    if buttons:
+        inline_keyboard.append(buttons)
+    inline_keyboard.append([footer])
+
+    return types.InlineKeyboardMarkup(inline_keyboard=inline_keyboard)

@@ -1,4 +1,5 @@
 ﻿import asyncio
+import logging
 from aiogram import Bot, Dispatcher
 from aiogram.types import BotCommand
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -6,6 +7,8 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from config import BOT_TOKEN
 from handlers import start, register, logout, home, profile, student, student_and_teacher, teacher, help
 from services.auth import shutdown
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
 
 
 async def main():
