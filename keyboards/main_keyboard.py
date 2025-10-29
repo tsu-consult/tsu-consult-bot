@@ -1,5 +1,4 @@
 from aiogram import types
-from aiogram.types import Message
 
 from services.profile import profile
 from services.auth import auth
@@ -19,6 +18,9 @@ student_menu = types.InlineKeyboardMarkup(
         [
             types.InlineKeyboardButton(text="👤 Профиль", callback_data="menu_profile"),
             types.InlineKeyboardButton(text="🚪 Выйти", callback_data="menu_logout")
+        ],
+        [
+            types.InlineKeyboardButton(text="❓ Справка", callback_data="menu_help")
         ]
     ]
 )
@@ -41,6 +43,9 @@ teacher_menu = types.InlineKeyboardMarkup(
         [
             types.InlineKeyboardButton(text="👤 Профиль", callback_data="menu_profile"),
             types.InlineKeyboardButton(text="🚪 Выйти", callback_data="menu_logout")
+        ],
+        [
+            types.InlineKeyboardButton(text="❓ Справка", callback_data="menu_help")
         ]
     ]
 )
@@ -50,6 +55,9 @@ teacher_unconfirmed_menu = types.InlineKeyboardMarkup(
         [
             types.InlineKeyboardButton(text="👤 Профиль", callback_data="menu_profile"),
             types.InlineKeyboardButton(text="🚪 Выйти", callback_data="menu_logout")
+        ],
+        [
+            types.InlineKeyboardButton(text="❓ Справка", callback_data="menu_help")
         ]
     ]
 )
@@ -58,6 +66,9 @@ guest_menu = types.InlineKeyboardMarkup(
     inline_keyboard=[
         [
             types.InlineKeyboardButton(text="🔑 Регистрация / Вход", callback_data="start")
+        ],
+        [
+            types.InlineKeyboardButton(text="❓ Справка", callback_data="menu_help")
         ]
     ]
 )

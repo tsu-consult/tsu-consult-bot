@@ -3,6 +3,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+DEBUG = os.getenv('DEBUG', 'True').lower() in ('1', 'true', 'yes')
+
 API_URL = os.getenv('API_URL')
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 

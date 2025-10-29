@@ -28,15 +28,27 @@ class TSUAuth:
 
     async def init_redis(self):
         if self.redis_tokens is None:
-            self.redis_tokens = aioredis.from_url(
-                f"redis://:{config.REDIS_PASSWORD}@{config.REDIS_HOST}:{config.REDIS_PORT}/{config.REDIS_DB}",
-                decode_responses=True
-            )
+            if config.DEBUG is False:
+                self.redis_tokens = aioredis.from_url(
+                    f"redis://:{config.REDIS_PASSWORD}@{config.REDIS_HOST}:{config.REDIS_PORT}/{config.REDIS_DB}",
+                    decode_responses=True
+                )
+            else:
+                self.redis_tokens = aioredis.from_url(
+                    f"redis://{config.REDIS_HOST}:{config.REDIS_PORT}/{config.REDIS_DB}",
+                    decode_responses=True
+                )
         if self.redis_flags is None:
-            self.redis_flags = aioredis.from_url(
-                f"redis://:{config.REDIS_PASSWORD}@{config.REDIS_HOST}:{config.REDIS_PORT}/{config.REDIS_DB + 1}",
-                decode_responses=True
-            )
+            if config.DEBUG is False:
+                self.redis_flags = aioredis.from_url(
+                    f"redis://:{config.REDIS_PASSWORD}@{config.REDIS_HOST}:{config.REDIS_PORT}/{config.REDIS_DB + 1}",
+                    decode_responses=True
+                )
+            else:
+                self.redis_flags = aioredis.from_url(
+                    f"redis://{config.REDIS_HOST}:{config.REDIS_PORT}/{config.REDIS_DB + 1}",
+                    decode_responses=True
+                )
 
     async def init_session(self):
         if self.session is None or self.session.closed:

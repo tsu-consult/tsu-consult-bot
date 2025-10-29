@@ -27,9 +27,9 @@ teachers = [
     {"username": "@teacher20", "telegram_id": 1000020, "phone_number": "9120000020", "first_name": "Людмила", "last_name": "Соловьёва", "role": "teacher", "password": "Test1234"}
 ]
 
-REGISTER_URL = "https://api.tsu-consult.orexi4.ru/auth/register/"
-LOGIN_URL = "https://api.tsu-consult.orexi4.ru/auth/login/"
-CONSULTATIONS_URL = "https://api.tsu-consult.orexi4.ru/consultations/"
+REGISTER_URL = "http://localhost:8000/auth/register/"
+LOGIN_URL = "http://localhost:8000/auth/login/"
+CONSULTATIONS_URL = "http://localhost:8000/consultations/"
 
 async def register_teacher(session, teacher):
     async with session.post(REGISTER_URL, json=teacher) as response:
@@ -77,12 +77,30 @@ async def create_consultation(session, token, teacher_username, index):
         else:
             print(f"❌ Ошибка создания консультации для {teacher_username}: {response.status} - {data}")
 
+
+async def ensure_and_get_token(session, teacher):
+    token = await login_teacher(session, teacher)
+    if token:
+        return token
+    
+    try:
+        await register_teacher(session, teacher)
+    except Exception as e:
+        print(f"❌ Ошибка при регистрации {teacher.get('username')}: {e}")
+        return None
+    
+    token = await login_teacher(session, teacher)
+    if not token:
+        print(f"❌ Не удалось получить токен для {teacher.get('username')} после регистрации")
+    return token
+
+
 async def main():
     async with aiohttp.ClientSession() as session:
         for teacher in teachers:
-            token = await login_teacher(session, teacher)
+            token = await ensure_and_get_token(session, teacher)
             if token:
-                num_consults = random.randint(1, 5)  # 1–5 консультаций
+                num_consults = random.randint(1, 5)
                 tasks = [create_consultation(session, token, teacher['username'], i) for i in range(num_consults)]
                 await asyncio.gather(*tasks)
 
