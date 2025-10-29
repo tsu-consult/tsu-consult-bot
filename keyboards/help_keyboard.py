@@ -63,7 +63,7 @@ async def make_help_page(role: str | None, current_key: str, teacher_status: str
             "teacher_main_menu",
         ]
     else:
-        preferred_order = ["subscribe", "notifications", "navigation"]
+        preferred_order = ["booking", "cancel_booking", "create_request", "subscribe", "notifications", "navigation"]
 
     ordered: list[tuple[str, str]] = []
     for p in preferred_order:
