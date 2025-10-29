@@ -19,36 +19,6 @@
       "key": "faq",
       "title": "❓ Частые вопросы (FAQ)",
       "visible": ["all"]
-    },
-    {
-      "key": "booking",
-      "title": "Запись на консультацию",
-      "visible": ["non_teacher"]
-    },
-    {
-      "key": "cancel_booking",
-      "title": "Просмотр и отмена записи",
-      "visible": ["non_teacher"]
-    },
-    {
-      "key": "create_request",
-      "title": "Создание запроса на консультацию",
-      "visible": ["non_teacher"]
-    },
-    {
-      "key": "subscribe",
-      "title": "Подписка на преподавателя и запрос",
-      "visible": ["non_teacher"]
-    },
-    {
-      "key": "notifications",
-      "title": "Получение уведомлений",
-      "visible": ["non_teacher"]
-    },
-    {
-      "key": "navigation",
-      "title": "Навигация по меню",
-      "visible": ["non_teacher"]
     }
   ],
   "content": {

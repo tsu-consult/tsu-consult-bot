@@ -44,9 +44,17 @@ async def make_help_page(role: str | None, current_key: str, teacher_status: str
                 prefix = k.split("_step_")[0]
                 step_prefixes.add(prefix)
 
-    for sec_key, sec_title in secs:
-        if sec_key in step_prefixes:
-            step_scenarios.append((sec_key, sec_title))
+    for prefix in sorted(step_prefixes):
+        raw_title = content.get(prefix)
+        if raw_title:
+            first_line = raw_title.splitlines()[0].strip()
+            if first_line.startswith("<b>") and first_line.endswith("</b>"):
+                title = first_line[3:-4].strip()
+            else:
+                title = first_line
+        else:
+            title = prefix.replace("_", " ").capitalize()
+        step_scenarios.append((prefix, title))
 
     if current_key == "student" and step_scenarios:
         for sc_key, sc_title in step_scenarios:
