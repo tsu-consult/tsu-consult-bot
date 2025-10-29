@@ -22,7 +22,7 @@ async def open_help_menu(callback: CallbackQuery):
         teacher_status = await profile.get_teacher_status(telegram_id)
 
     kb = await make_help_menu(role, teacher_status)
-    await callback.message.edit_text("❓ Справка — выберите раздел:", reply_markup=kb)
+    await callback.message.edit_text("❓ Справка — выберите раздел:", reply_markup=kb, parse_mode="HTML")
     await callback.answer()
 
 
@@ -71,20 +71,20 @@ async def help_section_callback(callback: CallbackQuery):
         kb = await make_help_page(role, key, teacher_status)
 
         try:
-            await callback.message.edit_text(text, reply_markup=kb)
+            await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
         except Exception as e:
             logger.exception(f"Failed to edit message for help_section:{key}: {e}")
             try:
-                await callback.message.answer(text, reply_markup=kb)
+                await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
             except Exception as e2:
                 logger.exception(f"Failed to send message fallback for help_section:{key}: {e2}")
-                await callback.answer("Произошла ошибка при отображении раздела справки.", show_alert=True)
+                await callback.answer("❌ Произошла ошибка при отображении раздела справки.", show_alert=True)
                 return
 
         await callback.answer()
     except Exception as e:
         logger.exception(f"Unhandled error in help_section_callback for key={key}: {e}")
-        await callback.answer("Ошибка при открытии раздела справки. Попробуйте ещё раз.", show_alert=True)
+        await callback.answer("❌ Ошибка при открытии раздела справки. Попробуйте ещё раз.", show_alert=True)
 
 
 @router.callback_query(F.data == "help_back")
@@ -135,14 +135,14 @@ async def help_flow_callback(callback: CallbackQuery):
             text = await help_content.get_section_text(scenario)
             kb = await make_help_page(role, scenario, teacher_status)
             try:
-                await callback.message.edit_text(text, reply_markup=kb)
+                await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
             except Exception as e:
                 logger.exception(f"Failed to edit message for help_flow fallback scenario={scenario}: {e}")
                 try:
-                    await callback.message.answer(text, reply_markup=kb)
+                    await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
                 except Exception as e2:
                     logger.exception(f"Failed to send message fallback for help_flow scenario={scenario}: {e2}")
-                    await callback.answer("Произошла ошибка при отображении справки.", show_alert=True)
+                    await callback.answer("❌ Произошла ошибка при отображении справки.", show_alert=True)
                     return
             await callback.answer()
             return
@@ -151,22 +151,22 @@ async def help_flow_callback(callback: CallbackQuery):
         text = content.get(key) or await help_content.get_section_text(key) or ""
 
         if not text:
-            text = "Инструкция недоступна."
+            text = "❌ Инструкция недоступна."
 
         kb = await make_help_flow_keyboard(scenario, step, max_steps)
 
         try:
-            await callback.message.edit_text(text + "\n\n" + (content.get("help_footer", "")), reply_markup=kb)
+            await callback.message.edit_text(text + "\n\n" + (content.get("help_footer", "")), reply_markup=kb, parse_mode="HTML")
         except Exception as e:
             logger.exception(f"Failed to edit message for help_flow {scenario} step {step}: {e}")
             try:
-                await callback.message.answer(text + "\n\n" + (content.get("help_footer", "")), reply_markup=kb)
+                await callback.message.answer(text + "\n\n" + (content.get("help_footer", "")), reply_markup=kb, parse_mode="HTML")
             except Exception as e2:
                 logger.exception(f"Failed to send fallback message for help_flow {scenario} step {step}: {e2}")
-                await callback.answer("Произошла ошибка при открытии пошаговой инструкции.", show_alert=True)
+                await callback.answer("❌ Произошла ошибка при открытии пошаговой инструкции.", show_alert=True)
                 return
 
         await callback.answer()
     except Exception as e:
         logger.exception(f"Unhandled error in help_flow_callback for scenario={scenario}, step={step}: {e}")
-        await callback.answer("Ошибка при навигации по инструкции. Попробуйте ещё раз.", show_alert=True)
+        await callback.answer("❌ Ошибка при навигации по инструкции. Попробуйте ещё раз.", show_alert=True)
