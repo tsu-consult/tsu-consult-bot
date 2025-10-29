@@ -16,8 +16,11 @@ logger = logging.getLogger(__name__)
 @router.callback_query(F.data == "menu_help")
 async def open_help_menu(callback: CallbackQuery):
     telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if not role:
+        await callback.answer()
+        return
     logger.info(f"open_help_menu called by {telegram_id}, data={callback.data}")
-    role = await auth.get_role(telegram_id)
     teacher_status = None
     if role == "teacher":
         teacher_status = await profile.get_teacher_status(telegram_id)
@@ -30,8 +33,11 @@ async def open_help_menu(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("help_section:"))
 async def help_section_callback(callback: CallbackQuery):
     telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if not role:
+        await callback.answer()
+        return
     logger.info(f"help_section_callback called by {telegram_id}, data={callback.data}")
-    role = await auth.get_role(telegram_id)
     teacher_status = None
     if role == "teacher":
         teacher_status = await profile.get_teacher_status(telegram_id)
@@ -98,8 +104,11 @@ async def help_to_main_callback(callback: CallbackQuery):
 @router.callback_query(F.data.regexp(r"help_flow:([a-z_]+):(\d+)(?::([a-z_]+))?$") )
 async def help_flow_callback(callback: CallbackQuery):
     telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if not role:
+        await callback.answer()
+        return
     logger.info(f"help_flow_callback called by {telegram_id}, data={callback.data}")
-    role = await auth.get_role(telegram_id)
     teacher_status = None
     if role == "teacher":
         teacher_status = await profile.get_teacher_status(telegram_id)
