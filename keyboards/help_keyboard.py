@@ -36,10 +36,21 @@ async def make_help_page(role: str | None, current_key: str, teacher_status: str
     
     raw = await help_content.get_raw()
     content = raw.get("content", {})
-    step_prefix = f"{current_key}_step_"
-    has_steps = any(k.startswith(step_prefix) for k in content.keys())
-    if has_steps:
-        inline_keyboard.append([types.InlineKeyboardButton(text="📖 Пошаговая инструкция", callback_data=f"help_flow:{current_key}:1")])
+    step_scenarios: list[tuple[str, str]] = []
+    step_prefixes = set()
+    for k in content.keys():
+        if k.endswith("_step_1") or "_step_" in k:
+            if "_step_" in k:
+                prefix = k.split("_step_")[0]
+                step_prefixes.add(prefix)
+
+    for sec_key, sec_title in secs:
+        if sec_key in step_prefixes:
+            step_scenarios.append((sec_key, sec_title))
+
+    if current_key == "student" and step_scenarios:
+        for sc_key, sc_title in step_scenarios:
+            inline_keyboard.append([types.InlineKeyboardButton(text=f"{sc_title}", callback_data=f"help_flow:{sc_key}:1")])
 
     inline_keyboard.append([back_btn])
 
