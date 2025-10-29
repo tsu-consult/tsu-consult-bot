@@ -7,6 +7,7 @@ from services.profile import profile
 from services.help_content import help_content
 from keyboards.help_keyboard import make_help_menu, make_help_page, make_help_flow_keyboard
 from keyboards.main_keyboard import show_main_menu
+from utils.auth_utils import ensure_auth
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -40,33 +41,7 @@ async def help_section_callback(callback: CallbackQuery):
     try:
         text = await help_content.get_section_text(key)
         if not text:
-            if key == "student":
-                text = (
-                    "📘 Руководство пользователя\n\n"
-                    "1. Как найти преподавателя\n"
-                    "2. Как создать запрос на консультацию\n"
-                    "3. Как просмотреть свои консультации\n"
-                )
-            elif key == "teacher":
-                text = (
-                    "📗 Руководство пользователя\n\n"
-                    "1. Как создать консультацию\n"
-                    "2. Как просматривать запросы студентов\n"
-                    "3. Как управлять расписанием\n"
-                )
-            elif key == "guest":
-                text = (
-                    "👋 Руководство для гостя:\n\n"
-                    "1. Регистрация и вход — нажмите кнопку 'Регистрация / Вход' в главном меню.\n"
-                    "2. Доступные функции для гостей — только просмотр справки и регистрация.\n"
-                    "3. После регистрации вы сможете создавать запросы и смотреть преподавателей.\n"
-                )
-            else:
-                text = (
-                    "❓ Частые вопросы (FAQ):\n\n"
-                    "Q: Как зарегистрироваться?\nA: Нажмите кнопку 'Регистрация / Вход' в главном меню.\n\n"
-                    "Q: Что делать, если не приходит подтверждение?\nA: Проверьте, правильно ли указан Telegram ID в профиле.\n"
-                )
+            text = "❌ Инструкция недоступна."
 
         kb = await make_help_page(role, key, teacher_status)
 
@@ -90,8 +65,11 @@ async def help_section_callback(callback: CallbackQuery):
 @router.callback_query(F.data == "help_back")
 async def help_back_callback(callback: CallbackQuery):
     telegram_id = callback.from_user.id
-    logger.info(f"help_back called by {telegram_id}, data={callback.data}")
-    role = await auth.get_role(telegram_id)
+    role = await ensure_auth(telegram_id, callback)
+    if not role:
+        await callback.answer()
+        return
+    
     teacher_status = None
     if role == "teacher":
         teacher_status = await profile.get_teacher_status(telegram_id)
@@ -108,7 +86,10 @@ async def help_back_callback(callback: CallbackQuery):
 async def help_to_main_callback(callback: CallbackQuery):
     telegram_id = callback.from_user.id
     logger.info(f"help_to_main called by {telegram_id}, data={callback.data}")
-    role = await auth.get_role(telegram_id)
+    role = await ensure_auth(telegram_id, callback)
+    if not role:
+        await callback.answer()
+        return
 
     await show_main_menu(callback, role, edit_message=callback.message)
     await callback.answer()
