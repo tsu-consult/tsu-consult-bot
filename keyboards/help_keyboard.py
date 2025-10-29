@@ -22,17 +22,9 @@ async def make_help_page(role: str | None, current_key: str, teacher_status: str
     except ValueError:
         idx = 0
 
-    nav_buttons: list[types.InlineKeyboardButton] = []
-    if idx > 0:
-        nav_buttons.append(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"help_section:{keys[idx-1]}"))
-    if idx < len(keys) - 1:
-        nav_buttons.append(types.InlineKeyboardButton(text="Вперёд ➡️", callback_data=f"help_section:{keys[idx+1]}"))
-
     back_btn = types.InlineKeyboardButton(text="🔙 Назад к разделам", callback_data="help_back")
 
     inline_keyboard: list[list[types.InlineKeyboardButton]] = []
-    if nav_buttons:
-        inline_keyboard.append(nav_buttons)
     
     raw = await help_content.get_raw()
     content = raw.get("content", {})
@@ -74,7 +66,7 @@ async def make_help_flow_keyboard(scenario: str, step: int, max_steps: int) -> t
     if step < max_steps:
         buttons.append(types.InlineKeyboardButton(text="Далее ➡️", callback_data=f"help_flow:{scenario}:{step+1}"))
 
-    footer = types.InlineKeyboardButton(text="🔙 Назад к разделам", callback_data="help_back")
+    footer = types.InlineKeyboardButton(text="🔙 Назад в руководство", callback_data="help_section:student")
 
     inline_keyboard: list[list[types.InlineKeyboardButton]] = []
     if buttons:
