@@ -66,6 +66,8 @@ class HelpContent:
                 return True
             if token == "student" and role == "student":
                 return True
+            if token == "teacher" and role == "teacher":
+                return True
             if token == "teacher_active" and role == "teacher" and teacher_status == "active":
                 return True
             if token == "non_teacher" and role is not None and role != "teacher":
