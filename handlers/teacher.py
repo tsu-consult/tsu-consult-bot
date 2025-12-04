@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 from aiogram import Router, F
 from aiogram.exceptions import TelegramBadRequest
@@ -11,10 +11,10 @@ from keyboards.main_keyboard import show_main_menu
 from services.consultations import consultations
 from services.tasks import tasks_service
 from states.create_consultation import CreateConsultationFSM
+from states.update_task import UpdateTaskFSM
 from utils.auth_utils import ensure_auth
 from utils.consultations_utils import format_date_verbose
 from utils.messages import answer_and_delete
-
 router = Router()
 
 PAGE_SIZE = 3
@@ -496,7 +496,6 @@ async def paginate_teacher_tasks(callback: CallbackQuery):
 
 
 async def show_teacher_tasks_page(callback: CallbackQuery, telegram_id: int, page: int):
-    from datetime import timezone, timedelta
     from services.tasks import tasks_service
 
     tasks_data = await tasks_service.get_tasks(telegram_id, page=page, page_size=PAGE_SIZE)
@@ -664,20 +663,8 @@ async def show_teacher_task_selection_page(callback: CallbackQuery, telegram_id:
     await callback.answer()
 
 
-@router.callback_query(F.data.regexp(r"^teacher_task_detail_(\d+)_(\d+)$"))
-async def view_teacher_task_detail(callback: CallbackQuery):
-    from datetime import timezone, timedelta
+async def _show_teacher_task_detail(callback: CallbackQuery, telegram_id: int, task_id: int, page: int):
     from services.tasks import tasks_service
-
-    telegram_id = callback.from_user.id
-    role = await ensure_auth(telegram_id, callback)
-    if role != "teacher":
-        await callback.answer("Доступно только для преподавателей.", show_alert=True)
-        return
-
-    parts = callback.data.split("_")
-    task_id = int(parts[-2])
-    page = int(parts[-1])
 
     task = await tasks_service.get_task_details(telegram_id, task_id)
 
@@ -760,6 +747,9 @@ async def view_teacher_task_detail(callback: CallbackQuery):
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
+            InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"teacher_edit_task_{task_id}_{page}")
+        ],
+        [
             InlineKeyboardButton(text="⬅️ Назад", callback_data=f"teacher_choose_task_{page}"),
             InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")
         ]
@@ -771,3 +761,407 @@ async def view_teacher_task_detail(callback: CallbackQuery):
         await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
 
     await callback.answer()
+
+
+@router.callback_query(F.data.regexp(r"^teacher_task_detail_(\d+)_(\d+)$"))
+async def view_teacher_task_detail(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступ запрещен.", show_alert=True)
+        return
+
+    parts = callback.data.split("_")
+    task_id = int(parts[-2])
+    page = int(parts[-1])
+
+    await _show_teacher_task_detail(callback, telegram_id, task_id, page)
+
+
+@router.callback_query(F.data.regexp(r"^teacher_edit_task_(\d+)_(\d+)$"))
+async def edit_task_menu(callback: CallbackQuery, state: FSMContext):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    parts = callback.data.split("_")
+    task_id = int(parts[-2])
+    page = int(parts[-1])
+
+    task = await tasks_service.get_task_details(telegram_id, task_id)
+
+    if not task:
+        await callback.answer("❌ Не удалось загрузить задачу", show_alert=True)
+        return
+
+    await state.update_data(task_id=task_id, page=page, task=task)
+
+    text = "✏️ <b>Выберите, что вы хотите изменить:</b>"
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📝 Название", callback_data="teacher_edit_task_title")],
+        [InlineKeyboardButton(text="📄 Описание", callback_data="teacher_edit_task_description")],
+        [InlineKeyboardButton(text="📊 Статус", callback_data="teacher_edit_task_status")],
+        [InlineKeyboardButton(text="📅 Дедлайн", callback_data="teacher_edit_task_deadline")],
+        [InlineKeyboardButton(text="🔔 Напоминания", callback_data="teacher_edit_task_reminders")],
+        [
+            InlineKeyboardButton(text="⬅️ Назад", callback_data=f"teacher_task_detail_{task_id}_{page}"),
+            InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")
+        ]
+    ])
+
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    except TelegramBadRequest:
+        await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+    await callback.answer()
+
+
+@router.callback_query(F.data == "teacher_edit_task_title")
+async def edit_task_title_start(callback: CallbackQuery, state: FSMContext):
+    from states.update_task import UpdateTaskFSM
+
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    data = await state.get_data()
+    is_creator = data.get("is_creator", False)
+
+    if not is_creator:
+        await callback.answer("❌ Только создатель может редактировать название задачи.", show_alert=True)
+        return
+
+    await state.set_state(UpdateTaskFSM.waiting_for_title)
+
+    text = "✏️ Введите новое название задачи:"
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="teacher_cancel_edit_task")]
+    ])
+
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    except TelegramBadRequest:
+        await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+    await callback.answer()
+
+
+@router.callback_query(F.data == "teacher_edit_task_description")
+async def edit_task_description_start(callback: CallbackQuery, state: FSMContext):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    data = await state.get_data()
+    is_creator = data.get("is_creator", False)
+
+    if not is_creator:
+        await callback.answer("❌ Только создатель может редактировать описание задачи.", show_alert=True)
+        return
+
+    await state.set_state(UpdateTaskFSM.waiting_for_description)
+
+    text = "✏️ Введите новое описание задачи:"
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="teacher_cancel_edit_task")]
+    ])
+
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    except TelegramBadRequest:
+        await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+    await callback.answer()
+
+
+@router.callback_query(F.data == "teacher_edit_task_status")
+async def edit_task_status_start(callback: CallbackQuery, state: FSMContext):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    await state.set_state(UpdateTaskFSM.waiting_for_status)
+
+    text = "✏️ Выберите новый статус задачи:"
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔄 В процессе", callback_data="teacher_set_status_in_progress")],
+        [InlineKeyboardButton(text="✅ Выполнено", callback_data="teacher_set_status_completed")],
+        [InlineKeyboardButton(text="⏳ Ожидает", callback_data="teacher_set_status_pending")],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="teacher_cancel_edit_task")]
+    ])
+
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    except TelegramBadRequest:
+        await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+    await callback.answer()
+
+
+@router.callback_query(F.data.regexp(r"^teacher_set_status_(.+)$"))
+async def edit_task_status_process(callback: CallbackQuery, state: FSMContext):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    status = callback.data.replace("teacher_set_status_", "")
+
+    status_map = {
+        "in_progress": "in progress",
+        "completed": "completed",
+        "pending": "pending"
+    }
+
+    status_text_map = {
+        "in_progress": "В процессе",
+        "completed": "Выполнено",
+        "pending": "Ожидает"
+    }
+
+    api_status = status_map.get(status, status)
+    status_text = status_text_map.get(status, status)
+
+    data = await state.get_data()
+    task_id = data.get("task_id")
+    page = data.get("page")
+
+    result = await tasks_service.update_task(telegram_id, task_id, status=api_status)
+
+    if result:
+        text = f"✅ Статус задачи успешно изменен на: <b>{status_text}</b>"
+    else:
+        text = "❌ Не удалось обновить задачу. Попробуйте позже."
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⬅️ К задаче", callback_data=f"teacher_task_detail_{task_id}_{page}")],
+        [InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")]
+    ])
+
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    except TelegramBadRequest:
+        await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+    await callback.answer()
+    await state.clear()
+
+
+@router.callback_query(F.data == "teacher_edit_task_deadline")
+async def edit_task_deadline_start(callback: CallbackQuery, state: FSMContext):
+    from states.update_task import UpdateTaskFSM
+
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    await state.set_state(UpdateTaskFSM.waiting_for_deadline_date)
+
+    text = "📅 Введите новую дату дедлайна в формате ДД.ММ.ГГГГ (например, 25.12.2025):"
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="teacher_cancel_edit_task")]
+    ])
+
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    except TelegramBadRequest:
+        await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+    await callback.answer()
+
+
+@router.message(UpdateTaskFSM.waiting_for_deadline_time)
+async def edit_task_deadline_time_process(message: Message, state: FSMContext):
+    telegram_id = message.from_user.id
+    role = await ensure_auth(telegram_id, message)
+    if role != "teacher" and role != "dean":
+        await message.answer("Доступно только для преподавателей и деканата.")
+        return
+
+    if not message.text:
+        await message.answer("❗ Пожалуйста, введите текст.")
+        return
+
+    time_input = message.text.strip()
+    data = await state.get_data()
+    deadline_date = data.get("deadline_date")
+    task_id = data.get("task_id")
+    page = data.get("page")
+
+    if not deadline_date or not task_id or page is None:
+        await message.answer("❗ Ошибка: не удалось получить данные. Попробуйте начать заново.")
+        await state.clear()
+        return
+
+    try:
+        local_dt = datetime.strptime(f"{deadline_date} {time_input}", "%Y-%m-%d %H:%M")
+
+        tomsk_tz = timezone(timedelta(hours=7))
+        local_dt = local_dt.replace(tzinfo=tomsk_tz)
+
+        current_time_tomsk = datetime.now(timezone.utc).astimezone(tomsk_tz)
+
+        if local_dt <= current_time_tomsk:
+            prefix = "teacher" if role == "teacher" else "dean"
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="❌ Отмена", callback_data=f"{prefix}_cancel_edit_task")]
+            ])
+            current_formatted = current_time_tomsk.strftime("%d.%m.%Y %H:%M")
+            deadline_formatted = local_dt.strftime("%d.%m.%Y %H:%M")
+            await message.answer(
+                f"❗ Дедлайн не может быть в прошлом или настоящем.\n\n"
+                f"Текущее время (Томск): {current_formatted}\n"
+                f"Указанный дедлайн: {deadline_formatted}\n\n"
+                f"Введите будущую дату и время.",
+                reply_markup=keyboard
+            )
+            return
+
+        utc_dt = local_dt.astimezone(timezone.utc)
+        deadline_iso = utc_dt.isoformat()
+
+        result = await tasks_service.update_task(telegram_id, task_id, deadline=deadline_iso)
+
+        if result:
+            text = f"✅ Дедлайн задачи успешно обновлен на:\n📅 {local_dt.strftime('%d.%m.%Y')} в ⏰ {time_input}"
+        else:
+            text = "❌ Не удалось обновить задачу. Попробуйте позже."
+
+        prefix = "teacher" if role == "teacher" else "dean"
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ К задаче", callback_data=f"{prefix}_task_detail_{task_id}_{page}")],
+            [InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")]
+        ])
+
+        await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+        await state.clear()
+    except ValueError:
+        text = "❌ Неверный формат времени. Используйте формат ЧЧ:ММ (например, 23:59)."
+        prefix = "teacher" if role == "teacher" else "dean"
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"{prefix}_cancel_edit_task")]
+        ])
+        await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+
+@router.callback_query(F.data == "teacher_edit_task_reminders")
+async def edit_task_reminders_start(callback: CallbackQuery, state: FSMContext):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    await state.set_state(UpdateTaskFSM.waiting_for_reminders_choice)
+
+    text = "🔔 Выберите напоминания для задачи:"
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="15 минут", callback_data="teacher_reminder_15")],
+        [InlineKeyboardButton(text="30 минут", callback_data="teacher_reminder_30")],
+        [InlineKeyboardButton(text="1 час", callback_data="teacher_reminder_60")],
+        [InlineKeyboardButton(text="1 день", callback_data="teacher_reminder_1440")],
+        [InlineKeyboardButton(text="🔕 Без напоминаний", callback_data="teacher_reminder_none")],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="teacher_cancel_edit_task")]
+    ])
+
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    except TelegramBadRequest:
+        await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+    await callback.answer()
+
+
+@router.callback_query(F.data.regexp(r"^teacher_reminder_(\d+|none)$"))
+async def edit_task_reminders_process(callback: CallbackQuery, state: FSMContext):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    reminder_value = callback.data.replace("teacher_reminder_", "")
+
+    data = await state.get_data()
+    task_id = data.get("task_id")
+    page = data.get("page")
+
+    if reminder_value == "none":
+        reminders = []
+    else:
+        reminders = [{"minutes": int(reminder_value)}]
+
+    result = await tasks_service.update_task(telegram_id, task_id, reminders=reminders)
+
+    if result:
+        if reminder_value == "none":
+            text = "✅ Напоминания отключены"
+        else:
+            reminder_text_map = {
+                "15": "за 15 минут",
+                "30": "за 30 минут",
+                "60": "за 1 час",
+                "1440": "за 1 день"
+            }
+            text = f"✅ Напоминание установлено: {reminder_text_map.get(reminder_value, '')}"
+    else:
+        text = "❌ Не удалось обновить задачу. Попробуйте позже."
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⬅️ К задаче", callback_data=f"teacher_task_detail_{task_id}_{page}")],
+        [InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")]
+    ])
+
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    except TelegramBadRequest:
+        await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+    await callback.answer()
+    await state.clear()
+
+
+@router.callback_query(F.data == "teacher_cancel_edit_task")
+async def cancel_edit_task(callback: CallbackQuery, state: FSMContext):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    data = await state.get_data()
+    task_id = data.get("task_id")
+    page = data.get("page")
+
+    await state.clear()
+
+    if task_id is not None and page is not None:
+        await _show_teacher_task_detail(callback, telegram_id, task_id, page)
+    else:
+        text = "❌ Редактирование отменено"
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")]
+        ])
+        try:
+            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+        except TelegramBadRequest:
+            await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+        await callback.answer()
