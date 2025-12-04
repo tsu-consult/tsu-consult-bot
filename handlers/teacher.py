@@ -9,6 +9,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardBut
 from handlers.student_and_teacher import show_requests_page
 from keyboards.main_keyboard import show_main_menu
 from services.consultations import consultations
+from services.profile import profile
 from services.tasks import tasks_service
 from states.create_consultation import CreateConsultationFSM
 from states.update_task import UpdateTaskFSM
@@ -796,21 +797,32 @@ async def edit_task_menu(callback: CallbackQuery, state: FSMContext):
         await callback.answer("❌ Не удалось загрузить задачу", show_alert=True)
         return
 
-    await state.update_data(task_id=task_id, page=page, task=task)
+    user_profile = await profile.get_profile(telegram_id)
+    user_id = user_profile.get("id") if user_profile else None
+    creator = task.get("creator")
+    creator_id = creator.get("id") if creator else None
+    is_creator = (user_id == creator_id)
+
+    await state.update_data(task_id=task_id, page=page, task=task, is_creator=is_creator)
 
     text = "✏️ <b>Выберите, что вы хотите изменить:</b>"
 
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+    keyboard_rows = [
         [InlineKeyboardButton(text="📝 Название", callback_data="teacher_edit_task_title")],
         [InlineKeyboardButton(text="📄 Описание", callback_data="teacher_edit_task_description")],
         [InlineKeyboardButton(text="📊 Статус", callback_data="teacher_edit_task_status")],
-        [InlineKeyboardButton(text="📅 Дедлайн", callback_data="teacher_edit_task_deadline")],
-        [InlineKeyboardButton(text="🔔 Напоминания", callback_data="teacher_edit_task_reminders")],
-        [
-            InlineKeyboardButton(text="⬅️ Назад", callback_data=f"teacher_task_detail_{task_id}_{page}"),
-            InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")
-        ]
+        [InlineKeyboardButton(text="📅 Дедлайн", callback_data="teacher_edit_task_deadline")]
+    ]
+
+    if task.get("deadline"):
+        keyboard_rows.append([InlineKeyboardButton(text="🔔 Напоминания", callback_data="teacher_edit_task_reminders")])
+
+    keyboard_rows.append([
+        InlineKeyboardButton(text="⬅️ Назад", callback_data=f"teacher_task_detail_{task_id}_{page}"),
+        InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")
     ])
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
 
     try:
         await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
@@ -863,6 +875,7 @@ async def edit_task_description_start(callback: CallbackQuery, state: FSMContext
 
     data = await state.get_data()
     is_creator = data.get("is_creator", False)
+    task = data.get("task")
 
     if not is_creator:
         await callback.answer("❌ Только создатель может редактировать описание задачи.", show_alert=True)
@@ -872,10 +885,14 @@ async def edit_task_description_start(callback: CallbackQuery, state: FSMContext
 
     text = "✏️ Введите новое описание задачи:"
 
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🗑️ Убрать описание", callback_data="teacher_remove_description")],
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="teacher_cancel_edit_task")]
-    ])
+    keyboard_rows = []
+
+    if task and task.get("description"):
+        keyboard_rows.append([InlineKeyboardButton(text="🗑️ Убрать описание", callback_data="teacher_remove_description")])
+
+    keyboard_rows.append([InlineKeyboardButton(text="❌ Отмена", callback_data="teacher_cancel_edit_task")])
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
 
     try:
         await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
@@ -972,14 +989,21 @@ async def edit_task_deadline_start(callback: CallbackQuery, state: FSMContext):
         await callback.answer("Доступно только для преподавателей.", show_alert=True)
         return
 
+    data = await state.get_data()
+    task = data.get("task")
+
     await state.set_state(UpdateTaskFSM.waiting_for_deadline_date)
 
     text = "📅 Введите новую дату дедлайна в формате ДД.ММ.ГГГГ (например, 25.12.2025):"
 
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🗑️ Отменить дедлайн", callback_data="teacher_remove_deadline")],
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="teacher_cancel_edit_task")]
-    ])
+    keyboard_rows = []
+
+    if task and task.get("deadline"):
+        keyboard_rows.append([InlineKeyboardButton(text="🗑️ Отменить дедлайн", callback_data="teacher_remove_deadline")])
+
+    keyboard_rows.append([InlineKeyboardButton(text="❌ Отмена", callback_data="teacher_cancel_edit_task")])
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
 
     try:
         await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
@@ -1042,7 +1066,7 @@ async def edit_task_deadline_time_process(message: Message, state: FSMContext):
         result = await tasks_service.update_task(telegram_id, task_id, deadline=deadline_iso)
 
         if result:
-            text = f"✅ Дедлайн задачи успешно обновлен на:\n📅 {local_dt.strftime('%d.%m.%Y')} в ⏰ {time_input}"
+            text = f"✅ Дедлайн задачи успешно обновлен на: 📅 {local_dt.strftime('%d.%m.%Y')} в ⏰ {time_input}"
         else:
             text = "❌ Не удалось обновить задачу. Попробуйте позже."
 
@@ -1073,13 +1097,12 @@ async def edit_task_reminders_start(callback: CallbackQuery, state: FSMContext):
 
     await state.set_state(UpdateTaskFSM.waiting_for_reminders_choice)
 
-    text = "🔔 Выберите напоминания для задачи:"
+    text = "Выберите настройку напоминаний 👇\n\n" \
+           "• Настроить: выбрать свои варианты напоминаний\n" \
+           "• Без напоминаний: уведомления не будут отправляться"
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="15 минут", callback_data="teacher_reminder_15")],
-        [InlineKeyboardButton(text="30 минут", callback_data="teacher_reminder_30")],
-        [InlineKeyboardButton(text="1 час", callback_data="teacher_reminder_60")],
-        [InlineKeyboardButton(text="1 день", callback_data="teacher_reminder_1440")],
+        [InlineKeyboardButton(text="⚙️ Настроить напоминания", callback_data="teacher_reminder_custom")],
         [InlineKeyboardButton(text="🔕 Без напоминаний", callback_data="teacher_reminder_none")],
         [InlineKeyboardButton(text="❌ Отмена", callback_data="teacher_cancel_edit_task")]
     ])
@@ -1092,38 +1115,22 @@ async def edit_task_reminders_start(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.callback_query(F.data.regexp(r"^teacher_reminder_(\d+|none)$"))
-async def edit_task_reminders_process(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(F.data == "teacher_reminder_none")
+async def teacher_edit_task_reminders_none(callback: CallbackQuery, state: FSMContext):
     telegram_id = callback.from_user.id
     role = await ensure_auth(telegram_id, callback)
     if role != "teacher":
         await callback.answer("Доступно только для преподавателей.", show_alert=True)
         return
 
-    reminder_value = callback.data.replace("teacher_reminder_", "")
-
     data = await state.get_data()
     task_id = data.get("task_id")
     page = data.get("page")
 
-    if reminder_value == "none":
-        reminders = []
-    else:
-        reminders = [{"minutes": int(reminder_value)}]
-
-    result = await tasks_service.update_task(telegram_id, task_id, reminders=reminders)
+    result = await tasks_service.update_task(telegram_id, task_id, reminders=[])
 
     if result:
-        if reminder_value == "none":
-            text = "✅ Напоминания отключены"
-        else:
-            reminder_text_map = {
-                "15": "за 15 минут",
-                "30": "за 30 минут",
-                "60": "за 1 час",
-                "1440": "за 1 день"
-            }
-            text = f"✅ Напоминание установлено: {reminder_text_map.get(reminder_value, '')}"
+        text = "✅ Напоминания отключены"
     else:
         text = "❌ Не удалось обновить задачу. Попробуйте позже."
 
@@ -1139,6 +1146,159 @@ async def edit_task_reminders_process(callback: CallbackQuery, state: FSMContext
 
     await callback.answer()
     await state.clear()
+
+
+@router.callback_query(F.data == "teacher_reminder_custom")
+async def teacher_edit_task_reminders_custom(callback: CallbackQuery, state: FSMContext):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    await state.update_data(selected_reminders=[])
+    await state.set_state(UpdateTaskFSM.waiting_for_custom_reminders)
+    await teacher_show_reminders_selection(callback, state)
+    await callback.answer()
+
+
+async def teacher_show_reminders_selection(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    selected_reminders = data.get("selected_reminders", [])
+
+    reminder_options = [
+        (15, "15 минут"),
+        (30, "30 минут"),
+        (60, "1 час"),
+        (1440, "1 день")
+    ]
+
+    keyboard_rows = []
+
+    for minutes, label in reminder_options:
+        is_selected = minutes in selected_reminders
+        button_text = f"{'✅' if is_selected else '⬜'} За {label}"
+        keyboard_rows.append([
+            InlineKeyboardButton(
+                text=button_text,
+                callback_data=f"teacher_reminder_toggle_{minutes}"
+            )
+        ])
+
+    if selected_reminders:
+        keyboard_rows.append([
+            InlineKeyboardButton(text="✅ Подтвердить выбор", callback_data="teacher_reminder_confirm")
+        ])
+
+    keyboard_rows.append([
+        InlineKeyboardButton(text="🔙 Назад", callback_data="teacher_reminder_back")
+    ])
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
+
+    selected_count = len(selected_reminders)
+    text = "Выберите время для напоминаний 👇\n\n"
+    if selected_count > 0:
+        text += f"Выбрано: {selected_count}\n\n"
+    text += "Вы можете выбрать несколько вариантов"
+
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard)
+    except TelegramBadRequest:
+        await callback.message.answer(text, reply_markup=keyboard)
+
+
+@router.callback_query(F.data.regexp(r"^teacher_reminder_toggle_(\d+)$"), UpdateTaskFSM.waiting_for_custom_reminders)
+async def teacher_handle_reminder_toggle(callback: CallbackQuery, state: FSMContext):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    minutes = int(callback.data.split("_")[-1])
+
+    data = await state.get_data()
+    selected_reminders = data.get("selected_reminders", [])
+
+    if minutes in selected_reminders:
+        selected_reminders.remove(minutes)
+    else:
+        selected_reminders.append(minutes)
+
+    await state.update_data(selected_reminders=selected_reminders)
+    await teacher_show_reminders_selection(callback, state)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "teacher_reminder_confirm", UpdateTaskFSM.waiting_for_custom_reminders)
+async def teacher_handle_reminder_confirm(callback: CallbackQuery, state: FSMContext):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    data = await state.get_data()
+    selected_reminders = data.get("selected_reminders", [])
+    task_id = data.get("task_id")
+    page = data.get("page")
+
+    if not selected_reminders:
+        await callback.answer("❗ Выберите хотя бы одно напоминание", show_alert=True)
+        return
+
+    reminders = [{"method": "popup", "minutes": minutes} for minutes in selected_reminders]
+
+    result = await tasks_service.update_task(telegram_id, task_id, reminders=reminders)
+
+    if result:
+        reminder_labels = {15: "15 минут", 30: "30 минут", 60: "1 час", 1440: "1 день"}
+        reminders_text = ", ".join([f"за {reminder_labels[m]}" for m in sorted(selected_reminders)])
+        text = f"✅ Напоминания установлены: {reminders_text}"
+    else:
+        text = "❌ Не удалось обновить задачу. Попробуйте позже."
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⬅️ К задаче", callback_data=f"teacher_task_detail_{task_id}_{page}")],
+        [InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")]
+    ])
+
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    except TelegramBadRequest:
+        await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+    await callback.answer()
+    await state.clear()
+
+
+@router.callback_query(F.data == "teacher_reminder_back", UpdateTaskFSM.waiting_for_custom_reminders)
+async def teacher_handle_reminder_back(callback: CallbackQuery, state: FSMContext):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    await state.set_state(UpdateTaskFSM.waiting_for_reminders_choice)
+
+    text = "Выберите настройку напоминаний 👇\n\n" \
+           "• Настроить: выбрать свои варианты напоминаний\n" \
+           "• Без напоминаний: уведомления не будут отправляться"
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⚙️ Настроить напоминания", callback_data="teacher_reminder_custom")],
+        [InlineKeyboardButton(text="🔕 Без напоминаний", callback_data="teacher_reminder_none")],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="teacher_cancel_edit_task")]
+    ])
+
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    except TelegramBadRequest:
+        await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+    await callback.answer()
 
 
 @router.callback_query(F.data == "teacher_remove_description")
