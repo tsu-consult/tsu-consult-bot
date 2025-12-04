@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import json
 import logging
 
@@ -82,6 +82,9 @@ async def process_contact(message: Message, state: FSMContext):
         [
             InlineKeyboardButton(text="🎓 Студент", callback_data="role_student"),
             InlineKeyboardButton(text="👨‍🏫 Преподаватель", callback_data="role_teacher")
+        ],
+        [
+            InlineKeyboardButton(text="🏛️ Деканат", callback_data="role_dean")
         ]
     ])
 

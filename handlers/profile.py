@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
@@ -68,6 +68,24 @@ async def resubmit_teacher_request(callback: CallbackQuery):
         await callback.message.answer("Успешно ✅\n\nЗапрос на утверждение был отправлен повторно и ожидает подтверждения от администратора.")
     else:
         logger.warning(f"Failed to resubmit teacher request for telegram_id={telegram_id}")
+        await answer_and_delete(callback.message, "❌ Не удалось отправить заявку. Попробуйте позже.")
+    await callback.answer()
+
+
+@router.callback_query(F.data == "resubmit_dean_request")
+async def resubmit_dean_request(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if not role:
+        await callback.answer()
+        return
+
+    success = await profile.resubmit_dean_request(telegram_id)
+
+    if success:
+        await callback.message.answer("Успешно ✅\n\nЗапрос на утверждение был отправлен повторно и ожидает подтверждения от администратора.")
+    else:
+        logger.warning(f"Failed to resubmit dean request for telegram_id={telegram_id}")
         await answer_and_delete(callback.message, "❌ Не удалось отправить заявку. Попробуйте позже.")
     await callback.answer()
 

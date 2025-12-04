@@ -62,6 +62,30 @@ teacher_unconfirmed_menu = types.InlineKeyboardMarkup(
     ]
 )
 
+dean_menu = types.InlineKeyboardMarkup(
+    inline_keyboard=[
+        [
+            types.InlineKeyboardButton(text="👤 Профиль", callback_data="menu_profile"),
+            types.InlineKeyboardButton(text="🚪 Выйти", callback_data="menu_logout")
+        ],
+        [
+            types.InlineKeyboardButton(text="❓ Справка", callback_data="menu_help")
+        ]
+    ]
+)
+
+dean_unconfirmed_menu = types.InlineKeyboardMarkup(
+    inline_keyboard=[
+        [
+            types.InlineKeyboardButton(text="👤 Профиль", callback_data="menu_profile"),
+            types.InlineKeyboardButton(text="🚪 Выйти", callback_data="menu_logout")
+        ],
+        [
+            types.InlineKeyboardButton(text="❓ Справка", callback_data="menu_help")
+        ]
+    ]
+)
+
 guest_menu = types.InlineKeyboardMarkup(
     inline_keyboard=[
         [
@@ -100,6 +124,15 @@ async def show_main_menu(obj: types.Message | types.CallbackQuery, role: str | N
         else:
             greeting += "\n\n⏳ Ваш аккаунт преподавателя находится на рассмотрении администратора.\nПока доступны только основные функции." if status == "pending" else "\n\n❌ Ваша заявка на аккаунт преподавателя была отклонена.\nПока доступны только основные функции."
             keyboard = teacher_unconfirmed_menu
+    elif role == "dean":
+        status = await profile.get_dean_status(telegram_id)
+        greeting = f"🏛️ Добро пожаловать, {first_name} {last_name}."
+
+        if status == "active":
+            keyboard = dean_menu
+        else:
+            greeting += "\n\n⏳ Ваш аккаунт деканата находится на рассмотрении администратора.\nПока доступны только основные функции." if status == "pending" else "\n\n❌ Ваша заявка на аккаунт деканата была отклонена.\nПока доступны только основные функции."
+            keyboard = dean_unconfirmed_menu
     else:
         greeting = "👋 Привет!\n\nЧтобы продолжить, зарегистрируйтесь или войдите в систему 👇"
         keyboard = guest_menu

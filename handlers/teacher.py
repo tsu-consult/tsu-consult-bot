@@ -282,7 +282,7 @@ async def cancel_create_consultation(callback: CallbackQuery, state: FSMContext)
     except TelegramBadRequest:
         pass
 
-    asyncio.create_task(answer_and_delete(callback.message, "❌ Создание консультации отменено.", delay=5))
+    await asyncio.create_task(answer_and_delete(callback.message, "❌ Создание консультации отменено.", delay=5))
 
     await show_main_menu(callback, role)
     await callback.answer()

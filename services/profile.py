@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 from services.auth import auth
 
 logger = logging.getLogger(__name__)
@@ -31,6 +31,15 @@ class TSUProfile:
                 return profile_data.get("status")
         except Exception as e:
             logger.error(f"Error obtaining teacher status: {e}")
+        return None
+
+    async def get_dean_status(self, telegram_id: int) -> str | None:
+        try:
+            profile_data = await self.get_profile(telegram_id)
+            if profile_data and profile_data.get("role") == "dean":
+                return profile_data.get("status")
+        except Exception as e:
+            logger.error(f"Error obtaining dean status: {e}")
         return None
 
     @staticmethod
@@ -68,8 +77,11 @@ class TSUProfile:
         role = user_data.get("role", "—")
         phone_number = user_data.get("phone_number", "—")
         status = user_data.get("status", "—")
+        email = user_data.get("email", "")
 
         phone_display = phone_number if phone_number.startswith("+") else f"+{phone_number}"
+
+        show_email = email and not email.endswith("@telegram.local")
 
         status_translation = {
             "active": "Активен",
@@ -85,6 +97,19 @@ class TSUProfile:
                 f"📞 <b>Телефон:</b> {phone_display}\n"
                 f"💬 <b>Telegram:</b> {username or '—'}\n"
                 f"🎓 <b>Роль:</b> Преподаватель\n"
+                f"📌 <b>Статус:</b> {status_text}"
+            )
+        elif role == "dean":
+            profile_text = (
+                f"👤 <b>Мой профиль</b>\n\n"
+                f"🪪 <b>Имя:</b> {first_name} {last_name}\n"
+                f"📞 <b>Телефон:</b> {phone_display}\n"
+                f"💬 <b>Telegram:</b> {username or '—'}\n"
+            )
+            if show_email:
+                profile_text += f"📧 <b>Email:</b> {email}\n"
+            profile_text += (
+                f"🎓 <b>Роль:</b> Деканат\n"
                 f"📌 <b>Статус:</b> {status_text}"
             )
         else:
@@ -112,6 +137,22 @@ class TSUProfile:
         except Exception as e:
             import logging
             logging.error(f"Error resubmitting teacher request for telegram_id={telegram_id}: {e}")
+            return False
+
+    @staticmethod
+    async def resubmit_dean_request(telegram_id: int) -> bool:
+        try:
+            auth.telegram_id = telegram_id
+            await auth.init_redis()
+            await auth.init_session()
+            await auth.load_tokens_if_needed()
+
+            response = await auth.api_request("POST", "profile/approval/resubmit/dean/")
+
+            return bool(response)
+        except Exception as e:
+            import logging
+            logging.error(f"Error resubmitting dean request for telegram_id={telegram_id}: {e}")
             return False
 
 

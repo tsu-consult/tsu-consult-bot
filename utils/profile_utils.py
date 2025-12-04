@@ -1,11 +1,14 @@
-﻿from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from services.profile import profile
 
 
 async def show_profile(message: Message, telegram_id: int, edit_message: Message | None = None):
     profile_text = await profile.format_profile_text(telegram_id)
 
-    status = await profile.get_teacher_status(telegram_id)
+    teacher_status = await profile.get_teacher_status(telegram_id)
+    dean_status = await profile.get_dean_status(telegram_id)
+
+    status = teacher_status or dean_status
 
     if status == "pending":
         keyboard = InlineKeyboardMarkup(
@@ -14,11 +17,12 @@ async def show_profile(message: Message, telegram_id: int, edit_message: Message
             ]
         )
     elif status == "rejected":
+        resubmit_callback = "resubmit_teacher_request" if teacher_status else "resubmit_dean_request"
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
                     InlineKeyboardButton(text="✏️ Изменить профиль", callback_data="edit_profile"),
-                    InlineKeyboardButton(text="🔄 Отправить заявку повторно", callback_data="resubmit_teacher_request")
+                    InlineKeyboardButton(text="🔄 Отправить заявку повторно", callback_data=resubmit_callback)
                 ],
                 [InlineKeyboardButton(text="⬅️ Назад", callback_data="menu_back")],
             ]
