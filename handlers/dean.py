@@ -921,7 +921,8 @@ async def dean_edit_task_menu(callback: CallbackQuery, state: FSMContext):
     keyboard_rows = [
         [InlineKeyboardButton(text="📝 Название", callback_data="dean_edit_task_title")],
         [InlineKeyboardButton(text="📄 Описание", callback_data="dean_edit_task_description")],
-        [InlineKeyboardButton(text="📅 Дедлайн", callback_data="dean_edit_task_deadline")]
+        [InlineKeyboardButton(text="📅 Дедлайн", callback_data="dean_edit_task_deadline")],
+        [InlineKeyboardButton(text="👨‍🏫 Назначить исполнителя", callback_data="dean_edit_task_assignee")]
     ]
 
     if task.get("deadline"):
@@ -1297,6 +1298,133 @@ async def dean_remove_deadline(callback: CallbackQuery, state: FSMContext):
 
     if result:
         text = "✅ Дедлайн задачи успешно отменен"
+    else:
+        text = "❌ Не удалось обновить задачу. Попробуйте позже."
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⬅️ К задаче", callback_data=f"dean_task_detail_{task_id}_{page}")],
+        [InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")]
+    ])
+
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    except TelegramBadRequest:
+        await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+    await callback.answer()
+    await state.clear()
+
+
+@router.callback_query(F.data == "dean_edit_task_assignee")
+async def dean_edit_task_assignee_start(callback: CallbackQuery, state: FSMContext):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "dean":
+        await callback.answer("Доступно только для деканата.", show_alert=True)
+        return
+
+    await state.set_state(UpdateTaskFSM.waiting_for_assignee_selection)
+    await state.update_data(assignee_page=0)
+
+    await dean_show_assignee_selection_page(callback, state, telegram_id, page=0)
+
+
+async def dean_show_assignee_selection_page(callback: CallbackQuery, state: FSMContext, telegram_id: int, page: int):
+    teachers_data = await TSUTeachers.get_teachers_page(telegram_id, page=page, page_size=PAGE_SIZE)
+
+    results = teachers_data.get("results", [])
+    current_page = teachers_data.get("current_page", page)
+    total_pages = teachers_data.get("total_pages", 1)
+
+    if not results:
+        await callback.answer("❌ Нет доступных преподавателей", show_alert=True)
+        return
+
+    text = f"👨‍🏫 <b>Выберите исполнителя для задачи</b>\n\nСтраница {current_page + 1} из {total_pages}"
+
+    keyboard_rows = []
+
+    for teacher in results:
+        first_name = teacher.get("first_name", "")
+        last_name = teacher.get("last_name", "")
+        teacher_id = teacher.get("id")
+        full_name = f"{first_name} {last_name}".strip()
+
+        keyboard_rows.append([
+            InlineKeyboardButton(
+                text=full_name,
+                callback_data=f"dean_update_assignee_{teacher_id}"
+            )
+        ])
+
+    nav_row = []
+    if current_page > 0:
+        nav_row.append(InlineKeyboardButton(
+            text="⬅️ Назад",
+            callback_data=f"dean_assignee_page_{current_page - 1}"
+        ))
+    if current_page < total_pages - 1:
+        nav_row.append(InlineKeyboardButton(
+            text="➡️ Вперёд",
+            callback_data=f"dean_assignee_page_{current_page + 1}"
+        ))
+    if nav_row:
+        keyboard_rows.append(nav_row)
+
+    keyboard_rows.append([InlineKeyboardButton(text="❌ Отмена", callback_data="dean_cancel_edit_task")])
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
+
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    except TelegramBadRequest:
+        await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+    await callback.answer()
+
+
+@router.callback_query(F.data.regexp(r"^dean_assignee_page_(\d+)$"))
+async def dean_assignee_page_navigation(callback: CallbackQuery, state: FSMContext):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "dean":
+        await callback.answer("Доступно только для деканата.", show_alert=True)
+        return
+
+    page = int(callback.data.split("_")[-1])
+    await state.update_data(assignee_page=page)
+    await dean_show_assignee_selection_page(callback, state, telegram_id, page=page)
+
+
+@router.callback_query(F.data.regexp(r"^dean_update_assignee_(\d+)$"))
+async def dean_update_assignee_process(callback: CallbackQuery, state: FSMContext):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "dean":
+        await callback.answer("Доступно только для деканата.", show_alert=True)
+        return
+
+    assignee_id = int(callback.data.split("_")[-1])
+
+    data = await state.get_data()
+    task_id = data.get("task_id")
+    page = data.get("page")
+
+    if not task_id or page is None:
+        await callback.answer("❌ Ошибка: не удалось определить задачу.", show_alert=True)
+        await state.clear()
+        return
+
+    result = await tasks_service.update_task(telegram_id, task_id, assignee_id=assignee_id)
+
+    if result:
+        teachers_data = await TSUTeachers.get_teachers_page(telegram_id, page=0, page_size=100)
+        teacher = next((t for t in teachers_data.get("results", []) if t.get("id") == assignee_id), None)
+        if teacher:
+            teacher_name = f"{teacher.get('first_name', '')} {teacher.get('last_name', '')}".strip()
+            text = f"✅ Исполнитель успешно изменен на: <b>{teacher_name}</b>"
+        else:
+            text = "✅ Исполнитель успешно изменен"
     else:
         text = "❌ Не удалось обновить задачу. Попробуйте позже."
 
