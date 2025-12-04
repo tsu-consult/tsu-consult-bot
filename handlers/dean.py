@@ -215,29 +215,8 @@ async def handle_teacher_selection(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "task_skip_deadline", CreateTaskFSM.waiting_for_deadline_date)
 async def skip_task_deadline(callback: CallbackQuery, state: FSMContext):
-    await state.update_data(deadline=None)
-    await state.set_state(CreateTaskFSM.waiting_for_reminders_choice)
-
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Использовать напоминания по умолчанию", callback_data="task_reminders_default")],
-        [InlineKeyboardButton(text="🔕 Без напоминаний", callback_data="task_reminders_none")]
-    ])
-
-    try:
-        await callback.message.edit_text(
-            "Выберите настройку напоминаний 👇\n\n"
-            "• По умолчанию, за 15 минут до дедлайна\n"
-            "• Без напоминаний: уведомления не будут отправляться",
-            reply_markup=keyboard
-        )
-    except TelegramBadRequest:
-        await callback.message.answer(
-            "Выберите настройку напоминаний 👇\n\n"
-            "• По умолчанию, за 15 минут до дедлайна\n"
-            "• Без напоминаний: уведомления не будут отправляться",
-            reply_markup=keyboard
-        )
-
+    await state.update_data(deadline=None, reminders=[])
+    await show_task_confirmation(callback, state)
     await callback.answer()
 
 
@@ -490,35 +469,38 @@ async def show_task_confirmation(callback: CallbackQuery, state: FSMContext):
         except:
             deadline_text = deadline
 
-    if reminders is None:
-        reminders_text = "за 15 минут"
-    elif not reminders:
-        reminders_text = "Отключены"
-    else:
-        reminder_labels = []
-        for reminder in reminders:
-            minutes = reminder.get("minutes", 0)
-            if minutes == 15:
-                reminder_labels.append("15 минут")
-            elif minutes == 30:
-                reminder_labels.append("30 минут")
-            elif minutes == 60:
-                reminder_labels.append("1 час")
-            elif minutes == 1440:
-                reminder_labels.append("1 день")
-            else:
-                reminder_labels.append(f"{minutes} минут")
-        reminders_text = "За " + ", ".join(reminder_labels)
+    summary_parts = [
+        "Проверьте данные задачи:\n",
+        f"📌 Название: {title}",
+        f"📝 Описание: {description or 'Не указано'}",
+        f"👨‍🏫 Назначен: {teacher_name}",
+        f"📅 Дедлайн: {deadline_text}"
+    ]
 
-    summary = (
-        "Проверьте данные задачи:\n\n"
-        f"📌 Название: {title}\n"
-        f"📝 Описание: {description or 'Не указано'}\n"
-        f"👨‍🏫 Назначен: {teacher_name}\n"
-        f"📅 Дедлайн: {deadline_text}\n"
-        f"🔔 Напоминания: {reminders_text}\n\n"
-        "Создать задачу?"
-    )
+    if deadline:
+        if reminders is None:
+            reminders_text = "за 15 минут"
+        elif not reminders:
+            reminders_text = "Отключены"
+        else:
+            reminder_labels = []
+            for reminder in reminders:
+                minutes = reminder.get("minutes", 0)
+                if minutes == 15:
+                    reminder_labels.append("15 минут")
+                elif minutes == 30:
+                    reminder_labels.append("30 минут")
+                elif minutes == 60:
+                    reminder_labels.append("1 час")
+                elif minutes == 1440:
+                    reminder_labels.append("1 день")
+                else:
+                    reminder_labels.append(f"{minutes} минут")
+            reminders_text = "За " + ", ".join(reminder_labels)
+        summary_parts.append(f"🔔 Напоминания: {reminders_text}")
+
+    summary_parts.append("\nСоздать задачу?")
+    summary = "\n".join(summary_parts)
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✅ Подтвердить", callback_data="confirm_create_task")],
