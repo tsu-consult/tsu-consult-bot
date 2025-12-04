@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 
 from aiogram import Router, F
@@ -8,11 +9,11 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardBut
 from handlers.student_and_teacher import show_requests_page
 from keyboards.main_keyboard import show_main_menu
 from services.consultations import consultations
+from services.tasks import tasks_service
 from states.create_consultation import CreateConsultationFSM
 from utils.auth_utils import ensure_auth
 from utils.consultations_utils import format_date_verbose
 from utils.messages import answer_and_delete
-import asyncio
 
 router = Router()
 
@@ -469,3 +470,304 @@ async def teacher_view_requests(callback: CallbackQuery):
         return
 
     await show_requests_page(callback, telegram_id, role, page=1)
+
+
+@router.callback_query(F.data == "teacher_view_tasks")
+async def view_teacher_tasks_first_page(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    await show_teacher_tasks_page(callback, telegram_id, page=1)
+
+
+@router.callback_query(F.data.regexp(r"^teacher_tasks_page_(\d+)$"))
+async def paginate_teacher_tasks(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    page = int(callback.data.split("_")[-1])
+    await show_teacher_tasks_page(callback, telegram_id, page=page)
+
+
+async def show_teacher_tasks_page(callback: CallbackQuery, telegram_id: int, page: int):
+    from datetime import timezone, timedelta
+    from services.tasks import tasks_service
+
+    tasks_data = await tasks_service.get_tasks(telegram_id, page=page, page_size=PAGE_SIZE)
+
+    results = tasks_data.get("results", [])
+    results = [task for task in results if task.get("status") not in ["deleted", "cancelled", "archived"]]
+
+    current_page = tasks_data.get("current_page", page)
+    total_pages = max(tasks_data.get("total_pages", 1), 1)
+
+    if not results:
+        text = "📋 У вас пока нет назначенных задач."
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")]
+        ])
+        try:
+            await callback.message.edit_text(text, reply_markup=keyboard)
+        except TelegramBadRequest:
+            await callback.message.answer(text, reply_markup=keyboard)
+        await callback.answer()
+        return
+
+    text_lines = [f"📋 <b>Мои задачи — страница {current_page} из {total_pages}</b>\n"]
+
+    for task in results:
+        title = task.get("title", "Без названия")
+        status = task.get("status", "unknown")
+
+        status_text_map = {
+            "in_progress": "В процессе",
+            "in progress": "В процессе",
+            "active": "В процессе",
+            "completed": "Выполнено",
+            "pending": "Ожидает",
+            "deleted": "Удалена",
+            "cancelled": "Отменена",
+            "archived": "Архивирована"
+        }
+        status_text = status_text_map.get(status, status.title() if status != 'unknown' else 'Неизвестно')
+
+        deadline = task.get("deadline")
+        if deadline:
+            try:
+                dt_utc = datetime.fromisoformat(deadline.replace('Z', '+00:00'))
+                tomsk_tz = timezone(timedelta(hours=7))
+                dt_local = dt_utc.astimezone(tomsk_tz)
+                deadline_text = dt_local.strftime("%d.%m.%Y %H:%M")
+            except:
+                deadline_text = "—"
+        else:
+            deadline_text = "—"
+
+        text_lines.append(
+            f"\n<b>{title}</b>\n"
+            f"📊 Статус: {status_text}\n"
+            f"📅 Дедлайн: {deadline_text}"
+        )
+
+    keyboard_rows = []
+
+    keyboard_rows.append([
+        InlineKeyboardButton(
+            text="📝 Просмотреть подробнее",
+            callback_data=f"teacher_choose_task_{current_page}"
+        )
+    ])
+
+    nav_row = []
+    if current_page > 1:
+        nav_row.append(InlineKeyboardButton(
+            text="⬅️ Назад",
+            callback_data=f"teacher_tasks_page_{current_page - 1}"
+        ))
+    if current_page < total_pages:
+        nav_row.append(InlineKeyboardButton(
+            text="➡️ Вперёд",
+            callback_data=f"teacher_tasks_page_{current_page + 1}"
+        ))
+    if nav_row:
+        keyboard_rows.append(nav_row)
+
+    keyboard_rows.append([InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")])
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
+
+    try:
+        await callback.message.edit_text(
+            "\n".join(text_lines),
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+    except TelegramBadRequest:
+        await callback.message.answer(
+            "\n".join(text_lines),
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data.regexp(r"^teacher_choose_task_(\d+)$"))
+async def choose_teacher_task_for_details(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    page = int(callback.data.split("_")[-1])
+    await show_teacher_task_selection_page(callback, telegram_id, page=page)
+
+
+async def show_teacher_task_selection_page(callback: CallbackQuery, telegram_id: int, page: int):
+    tasks_data = await tasks_service.get_tasks(telegram_id, page=page, page_size=PAGE_SIZE)
+
+    results = tasks_data.get("results", [])
+    results = [task for task in results if task.get("status") not in ["deleted", "cancelled", "archived"]]
+
+    current_page = tasks_data.get("current_page", page)
+    total_pages = max(tasks_data.get("total_pages", 1), 1)
+
+    if not results:
+        await callback.answer("❌ Нет доступных задач", show_alert=True)
+        return
+
+    text = f"📋 <b>Выберите задачу для подробного просмотра</b>\n\nСтраница {current_page} из {total_pages}"
+
+    keyboard_rows = []
+
+    for task in results:
+        title = task.get("title", "Без названия")
+
+        keyboard_rows.append([
+            InlineKeyboardButton(
+                text=title,
+                callback_data=f"teacher_task_detail_{task['id']}_{current_page}"
+            )
+        ])
+
+    nav_row = []
+    if current_page > 1:
+        nav_row.append(InlineKeyboardButton(
+            text="⬅️ Назад",
+            callback_data=f"teacher_choose_task_{current_page - 1}"
+        ))
+    if current_page < total_pages:
+        nav_row.append(InlineKeyboardButton(
+            text="➡️ Вперёд",
+            callback_data=f"teacher_choose_task_{current_page + 1}"
+        ))
+    if nav_row:
+        keyboard_rows.append(nav_row)
+
+    keyboard_rows.append([
+        InlineKeyboardButton(text="🔙 К списку задач", callback_data=f"teacher_tasks_page_{current_page}")
+    ])
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
+
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    except TelegramBadRequest:
+        await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+    await callback.answer()
+
+
+@router.callback_query(F.data.regexp(r"^teacher_task_detail_(\d+)_(\d+)$"))
+async def view_teacher_task_detail(callback: CallbackQuery):
+    from datetime import timezone, timedelta
+    from services.tasks import tasks_service
+
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    parts = callback.data.split("_")
+    task_id = int(parts[-2])
+    page = int(parts[-1])
+
+    task = await tasks_service.get_task_details(telegram_id, task_id)
+
+    if not task:
+        await callback.answer("❌ Не удалось загрузить задачу", show_alert=True)
+        return
+
+    title = task.get("title", "Без названия")
+    description = task.get("description", "Нет описания")
+    status = task.get("status", "unknown")
+    status_text_map = {
+        "in progress": "В процессе",
+        "active": "В процессе",
+        "completed": "Выполнено",
+        "pending": "Ожидает",
+        "deleted": "Удалена",
+        "cancelled": "Отменена",
+        "archived": "Архивирована"
+    }
+    status_text = status_text_map.get(status, status.title() if status != 'unknown' else 'Неизвестно')
+
+    deadline = task.get("deadline")
+    if deadline:
+        try:
+            dt_utc = datetime.fromisoformat(deadline.replace('Z', '+00:00'))
+            tomsk_tz = timezone(timedelta(hours=7))
+            dt_local = dt_utc.astimezone(tomsk_tz)
+            deadline_text = dt_local.strftime("%d.%m.%Y %H:%M")
+        except:
+            deadline_text = "—"
+    else:
+        deadline_text = "Не указан"
+
+    creator = task.get("creator")
+    if creator:
+        creator_name = f"{creator.get('first_name', '')} {creator.get('last_name', '')}".strip()
+    else:
+        creator_name = "Не указан"
+
+    assignee = task.get("assignee")
+    assignee_id = assignee.get("id") if assignee else None
+    creator_id = creator.get("id") if creator else None
+
+    user_reminders = task.get("assignee_reminders", []) if assignee_id else task.get("reminders", [])
+
+    text_lines = [f"<b>{title}</b>"]
+
+    if description and description != "Нет описания":
+        text_lines.append(f"📝 {description}")
+
+    text_lines.append(f"📊 {status_text}")
+    text_lines.append(f"📅 Дедлайн: {deadline_text}")
+    text_lines.append(f"👤 Автор: {creator_name}")
+
+    if assignee_id and assignee_id != creator_id:
+        assignee_name = f"{assignee.get('first_name', '')} {assignee.get('last_name', '')}".strip()
+        text_lines.append(f"👨‍🏫 Назначен: {assignee_name}")
+
+    if deadline:
+        reminders = user_reminders
+        if reminders:
+            reminder_texts = []
+            for reminder in reminders:
+                minutes = reminder.get("minutes", 0)
+                if minutes == 15:
+                    reminder_texts.append("за 15 минут")
+                elif minutes == 30:
+                    reminder_texts.append("за 30 минут")
+                elif minutes == 60:
+                    reminder_texts.append("за 1 час")
+                elif minutes == 1440:
+                    reminder_texts.append("за 1 день")
+                else:
+                    reminder_texts.append(f"за {minutes} минут")
+            text_lines.append(f"🔔 {', '.join(reminder_texts)}")
+        else:
+            text_lines.append("🔕 Напоминания отключены")
+
+    text = "\n".join(text_lines)
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="⬅️ Назад", callback_data=f"teacher_choose_task_{page}"),
+            InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")
+        ]
+    ])
+
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    except TelegramBadRequest:
+        await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+    await callback.answer()

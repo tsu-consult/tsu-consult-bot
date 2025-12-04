@@ -42,6 +42,9 @@ teacher_menu = types.InlineKeyboardMarkup(
             types.InlineKeyboardButton(text="📅 Мои консультации", callback_data="teacher_my_consultations")
         ],
         [
+            types.InlineKeyboardButton(text="📋 Мои задачи", callback_data="teacher_view_tasks")
+        ],
+        [
             types.InlineKeyboardButton(text="👤 Профиль", callback_data="menu_profile"),
             types.InlineKeyboardButton(text="🚪 Выйти", callback_data="menu_logout")
         ],
@@ -67,6 +70,9 @@ def get_dean_menu():
     buttons = [
         [
             types.InlineKeyboardButton(text="➕ Создать задачу", callback_data="dean_create_task")
+        ],
+        [
+            types.InlineKeyboardButton(text="📋 Мои задачи", callback_data="dean_view_tasks")
         ],
         [
             types.InlineKeyboardButton(text="👤 Профиль", callback_data="menu_profile"),
