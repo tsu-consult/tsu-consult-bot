@@ -4,6 +4,7 @@ from aiogram import Router, F, types
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
+import config
 from keyboards.main_keyboard import show_main_menu
 from services.profile import profile
 from states.edit_profile import EditProfile
@@ -124,8 +125,11 @@ async def dean_manage_credentials(callback: CallbackQuery):
 
     if has_creds:
         keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
-            [types.InlineKeyboardButton(text="📧 Изменить email", callback_data="dean_change_email")],
-            [types.InlineKeyboardButton(text="🔒 Изменить пароль", callback_data="dean_change_password")],
+            [
+                types.InlineKeyboardButton(text="📧 Изменить email", callback_data="dean_change_email"),
+                types.InlineKeyboardButton(text="🔒 Изменить пароль", callback_data="dean_change_password")
+            ],
+            [types.InlineKeyboardButton(text="🌐 Открыть веб-версию", url=config.WEB_URL)],
             [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="menu_profile")]
         ])
         text = (
@@ -192,17 +196,23 @@ async def dean_process_email(message: Message, state: FSMContext):
             pass
 
         if success:
+            keyboard_buttons = [
+                [types.InlineKeyboardButton(text="🌐 Открыть веб-версию", url=config.WEB_URL)],
+                [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="menu_profile")]
+            ]
+            keyboard = types.InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
+
             await message.answer(
                 "✅ <b>Email успешно изменён!</b>\n\n"
                 f"📧 Новый email: <code>{email}</code>\n\n"
-                "Используйте новый email для входа в веб-версию системы.",
-                parse_mode="HTML"
+                f"Используйте новый email для входа в веб-версию системы.",
+                parse_mode="HTML",
+                reply_markup=keyboard
             )
         else:
             await message.answer(f"❌ Не удалось изменить email:\n{error_msg}")
 
         await state.clear()
-        await show_profile(message, telegram_id)
     else:
         await state.update_data(new_email=email)
 
@@ -256,17 +266,23 @@ async def dean_process_password(message: Message, state: FSMContext):
         pass
 
     if success:
+        keyboard_buttons = [
+            [types.InlineKeyboardButton(text="🌐 Открыть веб-версию", url=config.WEB_URL)],
+            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="menu_profile")]
+        ]
+        keyboard = types.InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
+
         await message.answer(
             "✅ <b>Учетные данные успешно добавлены!</b>\n\n"
             f"📧 Email: <code>{email}</code>\n\n"
-            "Теперь вы можете войти в веб-версию системы используя эти данные.",
-            parse_mode="HTML"
+            f"Теперь вы можете войти в веб-версию системы используя эти данные.",
+            parse_mode="HTML",
+            reply_markup=keyboard
         )
     else:
         await message.answer(f"❌ Не удалось добавить учетные данные:\n{error_msg}")
 
     await state.clear()
-    await show_profile(message, telegram_id)
 
 
 @router.callback_query(F.data == "dean_change_email")
@@ -376,15 +392,19 @@ async def dean_process_new_password(message: Message, state: FSMContext):
         pass
 
     if success:
+        keyboard_buttons = [
+            [types.InlineKeyboardButton(text="🌐 Открыть веб-версию", url=config.WEB_URL)],
+            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="menu_profile")]
+        ]
+        keyboard = types.InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
+
         await message.answer(
             "✅ <b>Пароль успешно изменён!</b>\n\n"
             "Используйте новый пароль для входа в веб-версию системы.",
-            parse_mode="HTML"
+            parse_mode="HTML",
+            reply_markup=keyboard
         )
     else:
         await message.answer(f"❌ Не удалось изменить пароль:\n{error_msg}")
 
     await state.clear()
-    await show_profile(message, telegram_id)
-
-

@@ -332,7 +332,10 @@ async def complete_registration_with_credentials(message: Message, state: FSMCon
             pass
 
         if success:
-            await message.answer("✅ Регистрация прошла успешно!\n🔐 Email и пароль добавлены.")
+            await message.answer(
+                "✅ Регистрация прошла успешно!\n"
+                "🔐 Email и пароль добавлены."
+            )
         else:
             await message.answer(
                 f"⚠️ Регистрация прошла успешно, но не удалось добавить учетные данные:\n{error_msg}\n\n"
