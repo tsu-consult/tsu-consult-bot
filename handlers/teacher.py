@@ -746,15 +746,27 @@ async def _show_teacher_task_detail(callback: CallbackQuery, telegram_id: int, t
 
     text = "\n".join(text_lines)
 
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"teacher_edit_task_{task_id}_{page}")
-        ],
+    user_profile = await profile.get_profile(telegram_id)
+    user_id = user_profile.get("id") if user_profile else None
+
+    edit_delete_row = [
+        InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"teacher_edit_task_{task_id}_{page}")
+    ]
+
+    if user_id == creator_id:
+        edit_delete_row.append(
+            InlineKeyboardButton(text="🗑 Удалить задачу", callback_data=f"teacher_delete_task_{task_id}_{page}")
+        )
+
+    keyboard_rows = [
+        edit_delete_row,
         [
             InlineKeyboardButton(text="⬅️ Назад", callback_data=f"teacher_choose_task_{page}"),
             InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")
         ]
-    ])
+    ]
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
 
     try:
         await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
@@ -1408,3 +1420,181 @@ async def cancel_edit_task(callback: CallbackQuery, state: FSMContext):
         except TelegramBadRequest:
             await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
         await callback.answer()
+
+
+@router.callback_query(F.data == "teacher_delete_task_from_menu")
+async def teacher_delete_task_from_main_menu(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    await teacher_show_task_deletion_page(callback, telegram_id, page=1)
+
+
+@router.callback_query(F.data.regexp(r"^teacher_choose_task_delete_(\d+)$"))
+async def teacher_choose_task_for_deletion(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    page = int(callback.data.split("_")[-1])
+    await teacher_show_task_deletion_page(callback, telegram_id, page=page)
+
+
+async def teacher_show_task_deletion_page(callback: CallbackQuery, telegram_id: int, page: int):
+    tasks_data = await tasks_service.get_tasks(telegram_id, page=page, page_size=PAGE_SIZE)
+
+    results = tasks_data.get("results", [])
+    results = [task for task in results if task.get("status") not in ["deleted", "cancelled", "archived"]]
+
+    current_page = tasks_data.get("current_page", page)
+    total_pages = max(tasks_data.get("total_pages", 1), 1)
+
+    if not results:
+        await callback.answer("❌ Нет доступных задач для удаления", show_alert=True)
+        return
+
+    user_profile = await profile.get_profile(telegram_id)
+    user_id = user_profile.get("id") if user_profile else None
+
+    text = f"🗑 <b>Выберите задачу для удаления</b>\n\nСтраница {current_page} из {total_pages}"
+
+    keyboard_rows = []
+
+    for task in results:
+        title = task.get("title", "Без названия")
+        creator = task.get("creator")
+        creator_id = creator.get("id") if creator else None
+
+        if user_id == creator_id:
+            keyboard_rows.append([
+                InlineKeyboardButton(
+                    text=title,
+                    callback_data=f"teacher_delete_task_confirm_{task['id']}_{current_page}"
+                )
+            ])
+
+    if not keyboard_rows:
+        await callback.answer("❌ У вас нет задач, которые можно удалить", show_alert=True)
+        return
+
+    nav_row = []
+    if current_page > 1:
+        nav_row.append(InlineKeyboardButton(
+            text="⬅️ Назад",
+            callback_data=f"teacher_choose_task_delete_{current_page - 1}"
+        ))
+    if current_page < total_pages:
+        nav_row.append(InlineKeyboardButton(
+            text="➡️ Вперёд",
+            callback_data=f"teacher_choose_task_delete_{current_page + 1}"
+        ))
+    if nav_row:
+        keyboard_rows.append(nav_row)
+
+    keyboard_rows.append([
+        InlineKeyboardButton(text="🔙 К списку задач", callback_data=f"teacher_tasks_page_{current_page}")
+    ])
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
+
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    except TelegramBadRequest:
+        await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+    await callback.answer()
+
+
+@router.callback_query(F.data.regexp(r"^teacher_delete_task_confirm_(\d+)_(\d+)$"))
+async def teacher_confirm_task_deletion(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    parts = callback.data.split("_")
+    task_id = int(parts[-2])
+    page = int(parts[-1])
+
+    task = await tasks_service.get_task_details(telegram_id, task_id)
+
+    if not task:
+        await callback.answer("❌ Задача не найдена", show_alert=True)
+        return
+
+    user_profile = await profile.get_profile(telegram_id)
+    user_id = user_profile.get("id") if user_profile else None
+    creator = task.get("creator")
+    creator_id = creator.get("id") if creator else None
+
+    if user_id != creator_id:
+        await callback.answer("❌ Только создатель может удалить задачу", show_alert=True)
+        return
+
+    title = task.get("title", "Без названия")
+    text = f"⚠️ <b>Подтверждение удаления</b>\n\nВы уверены, что хотите удалить задачу:\n<b>{title}</b>?"
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"teacher_delete_task_{task_id}_{page}"),
+            InlineKeyboardButton(text="❌ Отмена", callback_data=f"teacher_task_detail_{task_id}_{page}")
+        ]
+    ])
+
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    except TelegramBadRequest:
+        await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+    await callback.answer()
+
+
+@router.callback_query(F.data.regexp(r"^teacher_delete_task_(\d+)_(\d+)$"))
+async def teacher_delete_task(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    parts = callback.data.split("_")
+    task_id = int(parts[-2])
+    page = int(parts[-1])
+
+    task = await tasks_service.get_task_details(telegram_id, task_id)
+    if task:
+        user_profile = await profile.get_profile(telegram_id)
+        user_id = user_profile.get("id") if user_profile else None
+        creator = task.get("creator")
+        creator_id = creator.get("id") if creator else None
+
+        if user_id != creator_id:
+            await callback.answer("❌ Только создатель может удалить задачу", show_alert=True)
+            return
+
+    success = await tasks_service.delete_task(telegram_id, task_id)
+
+    if success:
+        text = "✅ Задача успешно удалена"
+    else:
+        text = "❌ Не удалось удалить задачу. Попробуйте позже."
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 К списку задач", callback_data=f"teacher_tasks_page_{page}")],
+        [InlineKeyboardButton(text="🏠 В главное меню", callback_data="back_to_main_menu")]
+    ])
+
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    except TelegramBadRequest:
+        await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+    await callback.answer()
+
+
