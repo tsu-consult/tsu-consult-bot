@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import json
 import logging
 
@@ -252,12 +252,15 @@ async def complete_registration(callback: CallbackQuery, state: FSMContext):
             tasks.append(callback.bot.delete_message(callback.message.chat.id, success_msg_id))
         tasks.append(edit_step(callback.message, state, "✅ Регистрация прошла успешно!"))
 
+        commands = [BotCommand(command="/home", description="Главное меню")]
+
+        if role == "teacher":
+            commands.append(BotCommand(command="/todos", description="Управление задачами"))
+
         tasks.append(
             callback.bot.set_my_commands(
-                commands = [
-                    BotCommand(command="/home", description="Главное меню"),
-                ],
-                scope = BotCommandScopeChat(chat_id=callback.message.chat.id)
+                commands=commands,
+                scope=BotCommandScopeChat(chat_id=callback.message.chat.id)
             )
         )
 
@@ -342,10 +345,13 @@ async def complete_registration_with_credentials(message: Message, state: FSMCon
                 "Вы можете добавить их позже в профиле."
             )
 
+        commands = [BotCommand(command="/home", description="Главное меню")]
+
+        if role == "teacher":
+            commands.append(BotCommand(command="/todos", description="Управление задачами"))
+
         await message.bot.set_my_commands(
-            commands=[
-                BotCommand(command="/home", description="Главное меню"),
-            ],
+            commands=commands,
             scope=BotCommandScopeChat(chat_id=message.chat.id)
         )
 

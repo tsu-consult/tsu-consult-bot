@@ -60,10 +60,13 @@ async def start_register_callback(callback: CallbackQuery, state: FSMContext):
             return
 
     if role:
+        commands = [BotCommand(command="/home", description="Главное меню")]
+
+        if role == "teacher":
+            commands.append(BotCommand(command="/todos", description="Управление задачами"))
+
         await callback.message.bot.set_my_commands(
-            commands=[
-                BotCommand(command="/home", description="Главное меню"),
-            ],
+            commands=commands,
             scope=BotCommandScopeChat(chat_id=callback.message.chat.id)
         )
         await show_main_menu(callback, role)
