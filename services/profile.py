@@ -108,9 +108,14 @@ class TSUProfile:
             )
             if show_email:
                 profile_text += f"📧 <b>Email:</b> {email}\n"
+
+            is_calendar_connected = await self.is_calendar_connected(telegram_id)
+            calendar_status = "✅" if is_calendar_connected else "❌"
+
             profile_text += (
                 f"🎓 <b>Роль:</b> Деканат\n"
-                f"📌 <b>Статус:</b> {status_text}"
+                f"📌 <b>Статус:</b> {status_text}\n"
+                f"📅 <b>Google Calendar:</b> {calendar_status}"
             )
         else:
             profile_text = (
@@ -154,6 +159,64 @@ class TSUProfile:
             import logging
             logging.error(f"Error resubmitting dean request for telegram_id={telegram_id}: {e}")
             return False
+    @staticmethod
+    async def get_calendar_auth_url(telegram_id: int) -> str | None:
+        try:
+            auth.telegram_id = telegram_id
+            await auth.init_redis()
+            await auth.init_session()
+            await auth.load_tokens_if_needed()
+
+            response = await auth.api_request("GET", "profile/calendar/init/")
+            logger.info(f"Calendar init API response for telegram_id={telegram_id}: {response}")
+
+            if response and "authorization_url" in response:
+                return response["authorization_url"]
+
+            logger.warning(f"Failed to get calendar auth URL for telegram_id={telegram_id}. Response: {response}")
+        except Exception as e:
+            logger.error(f"Error getting calendar auth URL for telegram_id={telegram_id}: {e}")
+        return None
+
+    @staticmethod
+    async def disconnect_calendar(telegram_id: int) -> bool:
+        try:
+            auth.telegram_id = telegram_id
+            await auth.init_redis()
+            await auth.init_session()
+            await auth.load_tokens_if_needed()
+
+            response = await auth.api_request("DELETE", "profile/calendar/disconnect/")
+            return bool(response)
+        except Exception as e:
+            logger.error(f"Error disconnecting calendar for telegram_id={telegram_id}: {e}")
+            return False
+
+    @staticmethod
+    async def set_calendar_connected(telegram_id: int, connected: bool):
+        try:
+            await auth.init_redis()
+            key = f"calendar_connected:{telegram_id}"
+            if connected:
+                await auth.redis_flags.set(key, "1", ex=86400 * 365)
+            else:
+                await auth.redis_flags.delete(key)
+            logger.info(f"Set calendar connection status for telegram_id={telegram_id}: {connected}")
+        except Exception as e:
+            logger.error(f"Error setting calendar connection status for telegram_id={telegram_id}: {e}")
+
+    @staticmethod
+    async def is_calendar_connected(telegram_id: int) -> bool:
+        try:
+            await auth.init_redis()
+            key = f"calendar_connected:{telegram_id}"
+            result = await auth.redis_flags.get(key)
+            is_connected = result == "1" if result else False
+            logger.info(f"Calendar connection status for telegram_id={telegram_id}: {is_connected}")
+            return is_connected
+        except Exception as e:
+            logger.error(f"Error checking calendar connection for telegram_id={telegram_id}: {e}")
+        return False
 
 
 profile = TSUProfile()
