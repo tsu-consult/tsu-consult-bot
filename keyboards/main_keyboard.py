@@ -42,9 +42,6 @@ teacher_menu = types.InlineKeyboardMarkup(
             types.InlineKeyboardButton(text="📅 Мои консультации", callback_data="teacher_my_consultations")
         ],
         [
-            types.InlineKeyboardButton(text="📋 Управление задачами", callback_data="teacher_tasks_menu")
-        ],
-        [
             types.InlineKeyboardButton(text="👤 Профиль", callback_data="menu_profile"),
             types.InlineKeyboardButton(text="🚪 Выйти", callback_data="menu_logout")
         ],

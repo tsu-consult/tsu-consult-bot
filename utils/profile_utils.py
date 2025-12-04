@@ -41,6 +41,9 @@ async def show_profile(message: Message, telegram_id: int, edit_message: Message
             keyboard_rows.append([InlineKeyboardButton(text="🔐 Учетные данные", callback_data="dean_manage_credentials")])
             if status == "active":
                 keyboard_rows.append([InlineKeyboardButton(text="📅 Google Calendar", callback_data="dean_manage_calendar")])
+        elif role == "teacher":
+            if status == "active":
+                keyboard_rows.append([InlineKeyboardButton(text="📅 Google Calendar", callback_data="teacher_manage_calendar")])
         keyboard_rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="menu_back")])
         keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
 

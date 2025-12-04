@@ -6,7 +6,7 @@ from aiogram.types import CallbackQuery, Message
 
 import config
 from keyboards.main_keyboard import show_main_menu
-from services.profile import profile
+from services.profile import profile, TSUProfile
 from states.edit_profile import EditProfile
 from utils.auth_utils import ensure_auth
 from utils.messages import answer_and_delete, delete_msg
@@ -424,7 +424,7 @@ async def dean_manage_calendar(callback: CallbackQuery):
         await callback.answer("Доступно только для подтвержденного деканата.", show_alert=True)
         return
 
-    is_connected = await profile.is_calendar_connected(telegram_id)
+    is_connected = await TSUProfile.is_calendar_connected(telegram_id)
 
     if is_connected:
         keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
@@ -437,7 +437,7 @@ async def dean_manage_calendar(callback: CallbackQuery):
         )
         await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
     else:
-        auth_url = await profile.get_calendar_auth_url(telegram_id)
+        auth_url = await TSUProfile.get_calendar_auth_url(telegram_id)
 
         if auth_url:
             keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
@@ -464,10 +464,85 @@ async def dean_disconnect_calendar(callback: CallbackQuery):
         await callback.answer("Доступно только для деканата.", show_alert=True)
         return
 
-    success = await profile.disconnect_calendar(telegram_id)
+    success = await TSUProfile.disconnect_calendar(telegram_id)
 
     if success:
-        await profile.set_calendar_connected(telegram_id, False)
+        await TSUProfile.set_calendar_connected(telegram_id, False)
+
+        keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="menu_profile")]
+        ])
+        await callback.message.edit_text(
+            "✅ <b>Google Calendar отключен</b>",
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+    else:
+        await callback.message.edit_text("❌ Не удалось отключить календарь. Попробуйте позже.")
+
+    await callback.answer()
+
+
+@router.callback_query(F.data == "teacher_manage_calendar")
+async def teacher_manage_calendar(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+
+    if not role or role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    status = await profile.get_teacher_status(telegram_id)
+    if status != "active":
+        await callback.answer("Доступно только для подтвержденных преподавателей.", show_alert=True)
+        return
+
+    is_connected = await TSUProfile.is_calendar_connected(telegram_id)
+
+    if is_connected:
+        keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text="❌ Отключить календарь", callback_data="teacher_disconnect_calendar")],
+            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="menu_profile")]
+        ])
+        text = (
+            "📅 <b>Google Calendar</b>\n\n"
+            "✅ Ваш Google Calendar подключен!"
+        )
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    else:
+        auth_url = await TSUProfile.get_calendar_auth_url(telegram_id)
+
+        if auth_url:
+            keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+                [types.InlineKeyboardButton(text="🔗 Авторизоваться в Google", url=auth_url)],
+                [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="menu_profile")]
+            ])
+            await callback.message.edit_text(
+                "🔐 <b>Авторизация в Google Calendar</b>\n\n"
+                "Для синхронизации задач с календарем необходимо авторизоваться в Google. "
+                "Нажмите на кнопку ниже, чтобы перейти на страницу авторизации. 👇",
+                parse_mode="HTML",
+                reply_markup=keyboard
+            )
+        else:
+            await callback.message.edit_text("❌ Не удалось получить ссылку для авторизации. Попробуйте позже.")
+
+    await callback.answer()
+
+
+@router.callback_query(F.data == "teacher_disconnect_calendar")
+async def teacher_disconnect_calendar(callback: CallbackQuery):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+
+    if not role or role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    success = await TSUProfile.disconnect_calendar(telegram_id)
+
+    if success:
+        await TSUProfile.set_calendar_connected(telegram_id, False)
 
         keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
             [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="menu_profile")]

@@ -25,11 +25,11 @@ async def cmd_start(message: Message, state: FSMContext):
             role = await auth.get_role(telegram_id)
             logger.info(f"User role: {role}")
 
-            if role == "dean":
+            if role == "dean" or role == "teacher":
                 from aiogram import types
-                from services.profile import profile
+                from services.profile import TSUProfile
 
-                await profile.set_calendar_connected(telegram_id, True)
+                await TSUProfile.set_calendar_connected(telegram_id, True)
                 logger.info(f"Calendar connected status set to True for telegram_id={telegram_id}")
 
                 keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
