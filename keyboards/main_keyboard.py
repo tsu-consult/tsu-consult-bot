@@ -66,6 +66,9 @@ teacher_unconfirmed_menu = types.InlineKeyboardMarkup(
 def get_dean_menu():
     buttons = [
         [
+            types.InlineKeyboardButton(text="➕ Создать задачу", callback_data="dean_create_task")
+        ],
+        [
             types.InlineKeyboardButton(text="👤 Профиль", callback_data="menu_profile"),
             types.InlineKeyboardButton(text="🚪 Выйти", callback_data="menu_logout")
         ],

@@ -5,7 +5,7 @@ from aiogram.types import BotCommand
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from config import BOT_TOKEN
-from handlers import start, register, logout, home, profile, student, student_and_teacher, teacher, help
+from handlers import start, register, logout, home, profile, student, student_and_teacher, teacher, help, dean
 from services.auth import shutdown
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
@@ -23,6 +23,7 @@ async def main():
     dp.include_router(student.router)
     dp.include_router(student_and_teacher.router)
     dp.include_router(teacher.router)
+    dp.include_router(dean.router)
     dp.include_router(help.router)
 
     await bot.set_my_commands([
