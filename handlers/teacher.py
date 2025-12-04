@@ -873,6 +873,7 @@ async def edit_task_description_start(callback: CallbackQuery, state: FSMContext
     text = "✏️ Введите новое описание задачи:"
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🗑️ Убрать описание", callback_data="teacher_remove_description")],
         [InlineKeyboardButton(text="❌ Отмена", callback_data="teacher_cancel_edit_task")]
     ])
 
@@ -976,6 +977,7 @@ async def edit_task_deadline_start(callback: CallbackQuery, state: FSMContext):
     text = "📅 Введите новую дату дедлайна в формате ДД.ММ.ГГГГ (например, 25.12.2025):"
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🗑️ Отменить дедлайн", callback_data="teacher_remove_deadline")],
         [InlineKeyboardButton(text="❌ Отмена", callback_data="teacher_cancel_edit_task")]
     ])
 
@@ -1122,6 +1124,87 @@ async def edit_task_reminders_process(callback: CallbackQuery, state: FSMContext
                 "1440": "за 1 день"
             }
             text = f"✅ Напоминание установлено: {reminder_text_map.get(reminder_value, '')}"
+    else:
+        text = "❌ Не удалось обновить задачу. Попробуйте позже."
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⬅️ К задаче", callback_data=f"teacher_task_detail_{task_id}_{page}")],
+        [InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")]
+    ])
+
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    except TelegramBadRequest:
+        await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+    await callback.answer()
+    await state.clear()
+
+
+@router.callback_query(F.data == "teacher_remove_description")
+async def teacher_remove_description(callback: CallbackQuery, state: FSMContext):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    data = await state.get_data()
+    task_id = data.get("task_id")
+    page = data.get("page")
+    is_creator = data.get("is_creator", False)
+
+    if not is_creator:
+        await callback.answer("❌ Только создатель может редактировать описание задачи.", show_alert=True)
+        return
+
+    if not task_id or page is None:
+        await callback.answer("❌ Ошибка: не удалось определить задачу.", show_alert=True)
+        await state.clear()
+        return
+
+    result = await tasks_service.update_task(telegram_id, task_id, description="")
+
+    if result:
+        text = "✅ Описание задачи успешно удалено"
+    else:
+        text = "❌ Не удалось обновить задачу. Попробуйте позже."
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⬅️ К задаче", callback_data=f"teacher_task_detail_{task_id}_{page}")],
+        [InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_to_main_menu")]
+    ])
+
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    except TelegramBadRequest:
+        await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+    await callback.answer()
+    await state.clear()
+
+
+@router.callback_query(F.data == "teacher_remove_deadline")
+async def teacher_remove_deadline(callback: CallbackQuery, state: FSMContext):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+    if role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    data = await state.get_data()
+    task_id = data.get("task_id")
+    page = data.get("page")
+
+    if not task_id or page is None:
+        await callback.answer("❌ Ошибка: не удалось определить задачу.", show_alert=True)
+        await state.clear()
+        return
+
+    result = await tasks_service.update_task(telegram_id, task_id, deadline=None)
+
+    if result:
+        text = "✅ Дедлайн задачи успешно отменен"
     else:
         text = "❌ Не удалось обновить задачу. Попробуйте позже."
 
