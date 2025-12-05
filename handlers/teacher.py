@@ -712,7 +712,13 @@ async def _show_teacher_task_detail(callback: CallbackQuery, telegram_id: int, t
     assignee_id = assignee.get("id") if assignee else None
     creator_id = creator.get("id") if creator else None
 
-    user_reminders = task.get("assignee_reminders", []) if assignee_id else task.get("reminders", [])
+    user_profile = await profile.get_profile(telegram_id)
+    user_id = user_profile.get("id") if user_profile else None
+
+    if user_id == creator_id:
+        user_reminders = task.get("reminders", [])
+    else:
+        user_reminders = task.get("assignee_reminders", []) if assignee_id else task.get("reminders", [])
 
     text_lines = [f"<b>{title}</b>"]
 
@@ -748,9 +754,6 @@ async def _show_teacher_task_detail(callback: CallbackQuery, telegram_id: int, t
             text_lines.append("🔕 Напоминания отключены")
 
     text = "\n".join(text_lines)
-
-    user_profile = await profile.get_profile(telegram_id)
-    user_id = user_profile.get("id") if user_profile else None
 
     edit_delete_row = [
         InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"teacher_edit_task_{task_id}_{page}")
@@ -960,12 +963,12 @@ async def edit_task_status_process(callback: CallbackQuery, state: FSMContext):
     status = callback.data.replace("teacher_set_status_", "")
 
     status_map = {
-        "in progress": "in progress",
+        "in_progress": "in progress",
         "done": "done"
     }
 
     status_text_map = {
-        "in progress": "В процессе",
+        "in_progress": "В процессе",
         "done": "Выполнено"
     }
 
@@ -1538,7 +1541,7 @@ async def teacher_confirm_task_deletion(callback: CallbackQuery):
         return
 
     title = task.get("title", "Без названия")
-    text = f"⚠️ <b>Подтверждение удаления</b>\n\nВы уверены, что хотите удалить задачу:\n<b>{title}</b>?"
+    text = f"⚠️ <b>Подтверждение удаления</b>\n\nВы уверены, что хотите удалить задачу: <b>{title}</b>?"
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
@@ -2223,117 +2226,6 @@ async def show_teacher_task_selection_page(callback: CallbackQuery, telegram_id:
     keyboard_rows.append([
         InlineKeyboardButton(text="🔙 К списку задач", callback_data=f"teacher_tasks_page_{current_page}")
     ])
-
-    keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
-
-    try:
-        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
-    except TelegramBadRequest:
-        await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
-
-    await callback.answer()
-
-
-async def _show_teacher_task_detail(callback: CallbackQuery, telegram_id: int, task_id: int, page: int):
-    from services.tasks import tasks_service
-
-    task = await tasks_service.get_task_details(telegram_id, task_id)
-
-    if not task:
-        await callback.answer("❌ Не удалось загрузить задачу", show_alert=True)
-        return
-
-    title = task.get("title", "Без названия")
-    description = task.get("description", "Нет описания")
-    status = task.get("status", "unknown")
-    status_text_map = {
-        "in progress": "В процессе",
-        "active": "В процессе",
-        "done": "Выполнено",
-        "pending": "Ожидает",
-        "deleted": "Удалена",
-        "cancelled": "Отменена",
-        "archived": "Архивирована"
-    }
-    status_text = status_text_map.get(status, status.title() if status != 'unknown' else 'Неизвестно')
-
-    deadline = task.get("deadline")
-    if deadline:
-        try:
-            dt_utc = datetime.fromisoformat(deadline.replace('Z', '+00:00'))
-            tomsk_tz = timezone(timedelta(hours=7))
-            dt_local = dt_utc.astimezone(tomsk_tz)
-            deadline_text = dt_local.strftime("%d.%m.%Y %H:%M")
-        except:
-            deadline_text = "—"
-    else:
-        deadline_text = "Не указан"
-
-    creator = task.get("creator")
-    if creator:
-        creator_name = f"{creator.get('first_name', '')} {creator.get('last_name', '')}".strip()
-    else:
-        creator_name = "Не указан"
-
-    assignee = task.get("assignee")
-    assignee_id = assignee.get("id") if assignee else None
-    creator_id = creator.get("id") if creator else None
-
-    user_reminders = task.get("assignee_reminders", []) if assignee_id else task.get("reminders", [])
-
-    text_lines = [f"<b>{title}</b>"]
-
-    if description and description != "Нет описания":
-        text_lines.append(f"📝 {description}")
-
-    text_lines.append(f"📊 {status_text}")
-    text_lines.append(f"📅 Дедлайн: {deadline_text}")
-    text_lines.append(f"👤 Автор: {creator_name}")
-
-    if assignee_id and assignee_id != creator_id:
-        assignee_name = f"{assignee.get('first_name', '')} {assignee.get('last_name', '')}".strip()
-        text_lines.append(f"👨‍🏫 Назначен: {assignee_name}")
-
-    if deadline:
-        reminders = user_reminders
-        if reminders:
-            reminder_texts = []
-            for reminder in reminders:
-                minutes = reminder.get("minutes", 0)
-                if minutes == 15:
-                    reminder_texts.append("за 15 минут")
-                elif minutes == 30:
-                    reminder_texts.append("за 30 минут")
-                elif minutes == 60:
-                    reminder_texts.append("за 1 час")
-                elif minutes == 1440:
-                    reminder_texts.append("за 1 день")
-                else:
-                    reminder_texts.append(f"за {minutes} минут")
-            text_lines.append(f"🔔 {', '.join(reminder_texts)}")
-        else:
-            text_lines.append("🔕 Напоминания отключены")
-
-    text = "\n".join(text_lines)
-
-    user_profile = await profile.get_profile(telegram_id)
-    user_id = user_profile.get("id") if user_profile else None
-
-    edit_delete_row = [
-        InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"teacher_edit_task_{task_id}_{page}")
-    ]
-
-    if user_id == creator_id:
-        edit_delete_row.append(
-            InlineKeyboardButton(text="🗑 Удалить задачу", callback_data=f"teacher_delete_task_{task_id}_{page}")
-        )
-
-    keyboard_rows = [
-        edit_delete_row,
-        [
-            InlineKeyboardButton(text="⬅️ Назад", callback_data=f"teacher_choose_task_{page}")
-        ]
-    ]
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
 
