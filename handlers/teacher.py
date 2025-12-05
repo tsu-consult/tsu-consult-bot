@@ -936,7 +936,7 @@ async def edit_task_status_start(callback: CallbackQuery, state: FSMContext):
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔄 В процессе", callback_data="teacher_set_status_in_progress")],
-        [InlineKeyboardButton(text="✅ Выполнено", callback_data="teacher_set_status_completed")],
+        [InlineKeyboardButton(text="✅ Выполнено", callback_data="teacher_set_status_done")],
         [InlineKeyboardButton(text="❌ Отмена", callback_data="teacher_cancel_edit_task")]
     ])
 
@@ -2496,7 +2496,7 @@ async def edit_task_status_start(callback: CallbackQuery, state: FSMContext):
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔄 В процессе", callback_data="teacher_set_status_in_progress")],
-        [InlineKeyboardButton(text="✅ Выполнено", callback_data="teacher_set_status_completed")],
+        [InlineKeyboardButton(text="✅ Выполнено", callback_data="teacher_set_status_done")],
         [InlineKeyboardButton(text="❌ Отмена", callback_data="teacher_cancel_edit_task")]
     ])
 
@@ -2519,12 +2519,12 @@ async def edit_task_status_process(callback: CallbackQuery, state: FSMContext):
     status = callback.data.replace("teacher_set_status_", "")
 
     status_map = {
-        "in progress": "in progress",
+        "in_progress": "in progress",
         "done": "done"
     }
 
     status_text_map = {
-        "in progress": "В процессе",
+        "in_progress": "В процессе",
         "done": "Выполнено"
     }
 
