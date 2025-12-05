@@ -8,6 +8,8 @@ DEBUG = os.getenv('DEBUG', 'True').lower() in ('1', 'true', 'yes')
 API_URL = os.getenv('API_URL')
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 
+WEB_URL = 'https://tsu-consult.orexi4.ru/admin/'
+
 REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
 REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
 REDIS_DB = int(os.getenv('REDIS_DB', 0))

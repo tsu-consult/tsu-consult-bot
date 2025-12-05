@@ -147,7 +147,7 @@ class TSUAuth:
         try:
             response = await self.api_request("GET", "profile/")
             role = response.get("role")
-            if role in ("student", "teacher"):
+            if role in ("student", "teacher", "dean"):
                 return role
         except aiohttp.ClientResponseError as e:
             if e.status == 401:
