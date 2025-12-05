@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 
-@router.callback_query(F.data == "menu_profile")
+@router.callback_query(F.data.regexp(r"^menu_profile(?::(.+))?$"))
 async def menu_profile_handler(callback: CallbackQuery):
     telegram_id = callback.from_user.id
     role = await ensure_auth(telegram_id, callback)
@@ -24,12 +24,22 @@ async def menu_profile_handler(callback: CallbackQuery):
         await callback.answer()
         return
 
-    await show_profile(callback.message, telegram_id, edit_message=callback.message)
+    origin = None
+    if ":" in callback.data:
+        origin = callback.data.split(":", 1)[1]
+
+    await show_profile(callback.message, telegram_id, edit_message=callback.message, origin=origin)
     await callback.answer()
 
 
-@router.callback_query(F.data == "edit_profile")
+@router.callback_query(F.data.regexp(r"^edit_profile(?::(.+))?$"))
 async def edit_profile_callback(callback: CallbackQuery, state: FSMContext):
+    origin = None
+    if ":" in callback.data:
+        origin = callback.data.split(":", 1)[1]
+
+    await state.update_data(profile_origin=origin)
+
     await callback.message.answer("Введите новое имя и фамилию 👇\n\nПример: <b>Иван Иванов</b>\n\n⚠️ Внимание! Указывайте реальные имена и фамилии", parse_mode="HTML")
     await state.set_state(EditProfile.name)
     await callback.answer()
@@ -50,9 +60,12 @@ async def edit_profile_name(message: Message, state: FSMContext):
     else:
         await answer_and_delete(message, "❌ Не удалось обновить имя. Попробуйте позже.")
 
+    data = await state.get_data()
+    origin = data.get("profile_origin")
+
     await state.update_data(status_msg_id=success_msg.message_id)
 
-    await show_profile(message, telegram_id)
+    await show_profile(message, telegram_id, origin=origin)
 
 
 @router.callback_query(F.data == "resubmit_teacher_request")
@@ -91,7 +104,7 @@ async def resubmit_dean_request(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data == "menu_back")
+@router.callback_query(F.data.regexp(r"^menu_back(?::(.+))?$"))
 async def menu_back_handler(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     status_msg_id = data.get("status_msg_id")
@@ -105,12 +118,21 @@ async def menu_back_handler(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         return
 
+    origin = None
+    if ":" in callback.data:
+        origin = callback.data.split(":", 1)[1]
+
     await state.clear()
-    await show_main_menu(callback, role, edit_message=callback.message)
-    await callback.answer()
+
+    if origin == "tasks_menu":
+        from handlers.tasks_menu import show_teacher_tasks_menu
+        await show_teacher_tasks_menu(callback)
+    else:
+        await show_main_menu(callback, role, edit_message=callback.message)
+        await callback.answer()
 
 
-@router.callback_query(F.data == "dean_manage_credentials")
+@router.callback_query(F.data.regexp(r"^dean_manage_credentials(?::(.+))?$"))
 async def dean_manage_credentials(callback: CallbackQuery):
     from services.dean_credentials import dean_credentials
 
@@ -121,6 +143,12 @@ async def dean_manage_credentials(callback: CallbackQuery):
         await callback.answer("Доступно только для деканата.", show_alert=True)
         return
 
+    origin = None
+    if ":" in callback.data:
+        origin = callback.data.split(":", 1)[1]
+
+    back_callback = f"menu_profile:{origin}" if origin else "menu_profile"
+
     has_creds = await dean_credentials.has_credentials(telegram_id)
 
     if has_creds:
@@ -130,7 +158,7 @@ async def dean_manage_credentials(callback: CallbackQuery):
                 types.InlineKeyboardButton(text="🔒 Изменить пароль", callback_data="dean_change_password")
             ],
             [types.InlineKeyboardButton(text="🌐 Открыть веб-версию", url=config.WEB_URL)],
-            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="menu_profile")]
+            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data=back_callback)]
         ])
         text = (
             "🔐 <b>Управление учетными данными</b>\n\n"
@@ -140,7 +168,7 @@ async def dean_manage_credentials(callback: CallbackQuery):
     else:
         keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
             [types.InlineKeyboardButton(text="➕ Добавить учетные данные", callback_data="dean_add_credentials")],
-            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="menu_profile")]
+            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data=back_callback)]
         ])
         text = (
             "🔐 <b>Управление учетными данными</b>\n\n"

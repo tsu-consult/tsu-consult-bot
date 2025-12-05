@@ -55,7 +55,7 @@ async def guest_to_main(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data == "menu_help")
+@router.callback_query(F.data.regexp(r"^menu_help(?::(.+))?$"))
 async def open_help_menu(callback: CallbackQuery):
     telegram_id = callback.from_user.id
     role = await ensure_auth(telegram_id, callback)
@@ -64,11 +64,16 @@ async def open_help_menu(callback: CallbackQuery):
         return
     
     logger.info(f"open_help_menu called by {telegram_id}, data={callback.data}")
+
+    origin = None
+    if ":" in callback.data:
+        origin = callback.data.split(":", 1)[1]
+
     teacher_status = None
     if role == "teacher":
         teacher_status = await profile.get_teacher_status(telegram_id)
 
-    kb = await make_help_menu(role, teacher_status)
+    kb = await make_help_menu(role, teacher_status, origin)
     await callback.message.edit_text("❓ Справка — выберите раздел:", reply_markup=kb, parse_mode="HTML")
     await callback.answer()
 
@@ -86,14 +91,16 @@ async def help_section_callback(callback: CallbackQuery):
     if role == "teacher":
         teacher_status = await profile.get_teacher_status(telegram_id)
 
-    _, key = callback.data.split(":", 1)
+    parts = callback.data.split(":")
+    key = parts[1]
+    origin = parts[2] if len(parts) > 2 and parts[2] else None
 
     try:
         text = await help_content.get_section_text(key)
         if not text:
             text = "❌ Инструкция недоступна."
 
-        kb = await make_help_page(role, key, teacher_status)
+        kb = await make_help_page(role, key, teacher_status, origin)
 
         try:
             await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
@@ -112,19 +119,23 @@ async def help_section_callback(callback: CallbackQuery):
         await callback.answer("❌ Ошибка при открытии раздела справки. Попробуйте ещё раз.", show_alert=True)
 
 
-@router.callback_query(F.data == "help_back")
+@router.callback_query(F.data.regexp(r"^help_back(?::(.+))?$"))
 async def help_back_callback(callback: CallbackQuery):
     telegram_id = callback.from_user.id
     role = await ensure_auth(telegram_id, callback)
     if not role:
         await callback.answer()
         return
-    
+
+    origin = None
+    if ":" in callback.data:
+        origin = callback.data.split(":", 1)[1]
+
     teacher_status = None
     if role == "teacher":
         teacher_status = await profile.get_teacher_status(telegram_id)
 
-    kb = await make_help_menu(role, teacher_status)
+    kb = await make_help_menu(role, teacher_status, origin)
     try:
         await callback.message.edit_text("❓ Справка — выберите раздел:", reply_markup=kb, parse_mode="HTML")
     except Exception:
@@ -132,7 +143,7 @@ async def help_back_callback(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data == "help_to_main")
+@router.callback_query(F.data.regexp(r"^help_to_main(?::(.+))?$"))
 async def help_to_main_callback(callback: CallbackQuery):
     telegram_id = callback.from_user.id
     role = await ensure_auth(telegram_id, callback)
@@ -142,11 +153,19 @@ async def help_to_main_callback(callback: CallbackQuery):
     
     logger.info(f"help_to_main called by {telegram_id}, data={callback.data}")
 
-    await show_main_menu(callback, role, edit_message=callback.message)
-    await callback.answer()
+    origin = None
+    if ":" in callback.data:
+        origin = callback.data.split(":", 1)[1]
+
+    if origin == "tasks_menu":
+        from handlers.tasks_menu import show_teacher_tasks_menu
+        await show_teacher_tasks_menu(callback)
+    else:
+        await show_main_menu(callback, role, edit_message=callback.message)
+        await callback.answer()
 
 
-@router.callback_query(F.data.regexp(r"help_flow:([a-z_]+):(\d+)(?::([a-z_]+))?$") )
+@router.callback_query(F.data.regexp(r"help_flow:([a-z_]+):(\d+)(?::([a-z_]+))?(?::([a-z_]+))?$") )
 async def help_flow_callback(callback: CallbackQuery):
     telegram_id = callback.from_user.id
     role = await ensure_auth(telegram_id, callback)
@@ -165,6 +184,7 @@ async def help_flow_callback(callback: CallbackQuery):
         return
     _, scenario, step_str, *rest = parts
     origin = rest[0] if rest else "student"
+    menu_origin = rest[1] if len(rest) > 1 else None
     try:
         step = int(step_str)
     except ValueError:
@@ -188,7 +208,7 @@ async def help_flow_callback(callback: CallbackQuery):
 
         if max_steps == 0:
             text = await help_content.get_section_text(scenario)
-            kb = await make_help_page(role, scenario, teacher_status)
+            kb = await make_help_page(role, scenario, teacher_status, menu_origin)
             try:
                 await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
             except Exception as e:
@@ -208,7 +228,7 @@ async def help_flow_callback(callback: CallbackQuery):
         if not text:
             text = "❌ Инструкция недоступна."
 
-        kb = await make_help_flow_keyboard(scenario, step, max_steps, origin=origin)
+        kb = await make_help_flow_keyboard(scenario, step, max_steps, origin=origin, menu_origin=menu_origin)
 
         try:
             await callback.message.edit_text(text + "\n\n" + (content.get("help_footer", "")), reply_markup=kb, parse_mode="HTML")

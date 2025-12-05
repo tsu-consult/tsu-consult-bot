@@ -629,7 +629,7 @@ async def show_tasks_page(callback: CallbackQuery, telegram_id: int, page: int):
         status_text_map = {
             "in progress": "В процессе",
             "active": "В процессе",
-            "completed": "Выполнено",
+            "done": "Выполнено",
             "pending": "Ожидает",
             "deleted": "Удалена",
             "cancelled": "Отменена",
@@ -778,7 +778,7 @@ async def _show_task_detail(callback: CallbackQuery, telegram_id: int, task_id: 
     status_text_map = {
         "in progress": "В процессе",
         "active": "В процессе",
-        "completed": "Выполнено",
+        "done": "Выполнено",
         "pending": "Ожидает",
         "deleted": "Удалена",
         "cancelled": "Отменена",
