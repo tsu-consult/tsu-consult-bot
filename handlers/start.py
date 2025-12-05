@@ -25,11 +25,11 @@ async def cmd_start(message: Message, state: FSMContext):
             role = await auth.get_role(telegram_id)
             logger.info(f"User role: {role}")
 
-            if role == "dean":
+            if role == "dean" or role == "teacher":
                 from aiogram import types
-                from services.profile import profile
+                from services.profile import TSUProfile
 
-                await profile.set_calendar_connected(telegram_id, True)
+                await TSUProfile.set_calendar_connected(telegram_id, True)
                 logger.info(f"Calendar connected status set to True for telegram_id={telegram_id}")
 
                 keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
@@ -60,10 +60,13 @@ async def start_register_callback(callback: CallbackQuery, state: FSMContext):
             return
 
     if role:
+        commands = [BotCommand(command="/home", description="Главное меню")]
+
+        if role == "teacher":
+            commands.append(BotCommand(command="/todos", description="Управление задачами"))
+
         await callback.message.bot.set_my_commands(
-            commands=[
-                BotCommand(command="/home", description="Главное меню"),
-            ],
+            commands=commands,
             scope=BotCommandScopeChat(chat_id=callback.message.chat.id)
         )
         await show_main_menu(callback, role)

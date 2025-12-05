@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from aiogram import Router, F, types
@@ -5,8 +6,9 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 import config
+from handlers.tasks_menu import show_teacher_tasks_menu_message
 from keyboards.main_keyboard import show_main_menu
-from services.profile import profile
+from services.profile import profile, TSUProfile
 from states.edit_profile import EditProfile
 from utils.auth_utils import ensure_auth
 from utils.messages import answer_and_delete, delete_msg
@@ -16,43 +18,84 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 
-@router.callback_query(F.data == "menu_profile")
-async def menu_profile_handler(callback: CallbackQuery):
+@router.callback_query(F.data.regexp(r"^menu_profile(?::(.+))?$"))
+async def menu_profile_handler(callback: CallbackQuery, state: FSMContext):
     telegram_id = callback.from_user.id
     role = await ensure_auth(telegram_id, callback)
     if not role:
         await callback.answer()
         return
 
-    await show_profile(callback.message, telegram_id, edit_message=callback.message)
+    origin = None
+    if ":" in callback.data:
+        origin = callback.data.split(":", 1)[1]
+
+    await state.update_data(profile_origin=origin)
+
+    await show_profile(callback.message, telegram_id, edit_message=callback.message, origin=origin)
     await callback.answer()
 
 
-@router.callback_query(F.data == "edit_profile")
+@router.callback_query(F.data.regexp(r"^edit_profile(?::(.+))?$"))
 async def edit_profile_callback(callback: CallbackQuery, state: FSMContext):
+    origin = None
+    if ":" in callback.data:
+        origin = callback.data.split(":", 1)[1]
+
+    await state.update_data(profile_origin=origin)
+
     await callback.message.answer("Введите новое имя и фамилию 👇\n\nПример: <b>Иван Иванов</b>\n\n⚠️ Внимание! Указывайте реальные имена и фамилии", parse_mode="HTML")
     await state.set_state(EditProfile.name)
     await callback.answer()
+
+
 @router.message(EditProfile.name)
 async def edit_profile_name(message: Message, state: FSMContext):
     telegram_id = message.from_user.id
     new_name = message.text.strip()
+
+    if not new_name:
+        await message.answer("❗ Пожалуйста, введите имя и фамилию.")
+        return
 
     parts = new_name.split(maxsplit=1)
     first_name = parts[0]
     last_name = parts[1] if len(parts) > 1 else ""
 
     success = await profile.update_profile(telegram_id, first_name, last_name)
-    success_msg = None
+
+    data = await state.get_data()
+    origin = data.get("profile_origin")
 
     if success:
         success_msg = await message.answer("Успешно ✅")
+
+        success_msg_id = success_msg.message_id
+
+        await state.clear()
+
+        await state.update_data(status_msg_id=success_msg_id)
+
+        await show_profile(message, telegram_id, edit_message=None, origin=origin)
     else:
-        await answer_and_delete(message, "❌ Не удалось обновить имя. Попробуйте позже.")
+        await state.clear()
 
-    await state.update_data(status_msg_id=success_msg.message_id)
+        error_msg = await message.answer("❌ Не удалось обновить имя. Попробуйте позже.")
 
-    await show_profile(message, telegram_id)
+        if origin == "tasks_menu":
+            await show_teacher_tasks_menu_message(message)
+        else:
+            role = await ensure_auth(telegram_id, message)
+            await show_main_menu(message, role)
+
+        async def delete_after():
+            await asyncio.sleep(2)
+            try:
+                await error_msg.delete()
+            except:
+                pass
+
+        await asyncio.create_task(delete_after())
 
 
 @router.callback_query(F.data == "resubmit_teacher_request")
@@ -91,7 +134,7 @@ async def resubmit_dean_request(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data == "menu_back")
+@router.callback_query(F.data.regexp(r"^menu_back(?::(.+))?$"))
 async def menu_back_handler(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     status_msg_id = data.get("status_msg_id")
@@ -105,12 +148,21 @@ async def menu_back_handler(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         return
 
+    origin = None
+    if ":" in callback.data:
+        origin = callback.data.split(":", 1)[1]
+
     await state.clear()
-    await show_main_menu(callback, role, edit_message=callback.message)
-    await callback.answer()
+
+    if origin == "tasks_menu":
+        from handlers.tasks_menu import show_teacher_tasks_menu
+        await show_teacher_tasks_menu(callback)
+    else:
+        await show_main_menu(callback, role, edit_message=callback.message)
+        await callback.answer()
 
 
-@router.callback_query(F.data == "dean_manage_credentials")
+@router.callback_query(F.data.regexp(r"^dean_manage_credentials(?::(.+))?$"))
 async def dean_manage_credentials(callback: CallbackQuery):
     from services.dean_credentials import dean_credentials
 
@@ -121,6 +173,12 @@ async def dean_manage_credentials(callback: CallbackQuery):
         await callback.answer("Доступно только для деканата.", show_alert=True)
         return
 
+    origin = None
+    if ":" in callback.data:
+        origin = callback.data.split(":", 1)[1]
+
+    back_callback = f"menu_profile:{origin}" if origin else "menu_profile"
+
     has_creds = await dean_credentials.has_credentials(telegram_id)
 
     if has_creds:
@@ -130,7 +188,7 @@ async def dean_manage_credentials(callback: CallbackQuery):
                 types.InlineKeyboardButton(text="🔒 Изменить пароль", callback_data="dean_change_password")
             ],
             [types.InlineKeyboardButton(text="🌐 Открыть веб-версию", url=config.WEB_URL)],
-            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="menu_profile")]
+            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data=back_callback)]
         ])
         text = (
             "🔐 <b>Управление учетными данными</b>\n\n"
@@ -140,7 +198,7 @@ async def dean_manage_credentials(callback: CallbackQuery):
     else:
         keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
             [types.InlineKeyboardButton(text="➕ Добавить учетные данные", callback_data="dean_add_credentials")],
-            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="menu_profile")]
+            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data=back_callback)]
         ])
         text = (
             "🔐 <b>Управление учетными данными</b>\n\n"
@@ -411,7 +469,7 @@ async def dean_process_new_password(message: Message, state: FSMContext):
 
 
 @router.callback_query(F.data == "dean_manage_calendar")
-async def dean_manage_calendar(callback: CallbackQuery):
+async def dean_manage_calendar(callback: CallbackQuery, state: FSMContext):
     telegram_id = callback.from_user.id
     role = await ensure_auth(telegram_id, callback)
 
@@ -424,12 +482,17 @@ async def dean_manage_calendar(callback: CallbackQuery):
         await callback.answer("Доступно только для подтвержденного деканата.", show_alert=True)
         return
 
-    is_connected = await profile.is_calendar_connected(telegram_id)
+    data = await state.get_data()
+    origin = data.get("profile_origin")
+
+    back_callback = f"menu_profile:{origin}" if origin else "menu_profile"
+
+    is_connected = await TSUProfile.is_calendar_connected(telegram_id)
 
     if is_connected:
         keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
             [types.InlineKeyboardButton(text="❌ Отключить календарь", callback_data="dean_disconnect_calendar")],
-            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="menu_profile")]
+            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data=back_callback)]
         ])
         text = (
             "📅 <b>Google Calendar</b>\n\n"
@@ -437,12 +500,12 @@ async def dean_manage_calendar(callback: CallbackQuery):
         )
         await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
     else:
-        auth_url = await profile.get_calendar_auth_url(telegram_id)
+        auth_url = await TSUProfile.get_calendar_auth_url(telegram_id)
 
         if auth_url:
             keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
                 [types.InlineKeyboardButton(text="🔗 Авторизоваться в Google", url=auth_url)],
-                [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="menu_profile")]
+                [types.InlineKeyboardButton(text="⬅️ Назад", callback_data=back_callback)]
             ])
             await callback.message.edit_text(
                 "🔐 <b>Авторизация в Google Calendar</b>\n\n"
@@ -455,8 +518,10 @@ async def dean_manage_calendar(callback: CallbackQuery):
             await callback.message.edit_text("❌ Не удалось получить ссылку для авторизации. Попробуйте позже.")
 
     await callback.answer()
+
+
 @router.callback_query(F.data == "dean_disconnect_calendar")
-async def dean_disconnect_calendar(callback: CallbackQuery):
+async def dean_disconnect_calendar(callback: CallbackQuery, state: FSMContext):
     telegram_id = callback.from_user.id
     role = await ensure_auth(telegram_id, callback)
 
@@ -464,13 +529,103 @@ async def dean_disconnect_calendar(callback: CallbackQuery):
         await callback.answer("Доступно только для деканата.", show_alert=True)
         return
 
-    success = await profile.disconnect_calendar(telegram_id)
+    success = await TSUProfile.disconnect_calendar(telegram_id)
+
+    data = await state.get_data()
+    origin = data.get("profile_origin")
+
+    back_callback = f"menu_profile:{origin}" if origin else "menu_profile"
 
     if success:
-        await profile.set_calendar_connected(telegram_id, False)
+        await TSUProfile.set_calendar_connected(telegram_id, False)
 
         keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
-            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="menu_profile")]
+            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data=back_callback)]
+        ])
+        await callback.message.edit_text(
+            "✅ <b>Google Calendar отключен</b>",
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+    else:
+        await callback.message.edit_text("❌ Не удалось отключить календарь. Попробуйте позже.")
+
+    await callback.answer()
+
+
+@router.callback_query(F.data == "teacher_manage_calendar")
+async def teacher_manage_calendar(callback: CallbackQuery, state: FSMContext):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+
+    if not role or role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    status = await profile.get_teacher_status(telegram_id)
+    if status != "active":
+        await callback.answer("Доступно только для подтвержденных преподавателей.", show_alert=True)
+        return
+
+    data = await state.get_data()
+    origin = data.get("profile_origin")
+
+    back_callback = f"menu_profile:{origin}" if origin else "menu_profile"
+
+    is_connected = await TSUProfile.is_calendar_connected(telegram_id)
+
+    if is_connected:
+        keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text="❌ Отключить календарь", callback_data="teacher_disconnect_calendar")],
+            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data=back_callback)]
+        ])
+        text = (
+            "📅 <b>Google Calendar</b>\n\n"
+            "✅ Ваш Google Calendar подключен!"
+        )
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    else:
+        auth_url = await TSUProfile.get_calendar_auth_url(telegram_id)
+
+        if auth_url:
+            keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+                [types.InlineKeyboardButton(text="🔗 Авторизоваться в Google", url=auth_url)],
+                [types.InlineKeyboardButton(text="⬅️ Назад", callback_data=back_callback)]
+            ])
+            await callback.message.edit_text(
+                "🔐 <b>Авторизация в Google Calendar</b>\n\n"
+                "Для синхронизации задач с календарем необходимо авторизоваться в Google. "
+                "Нажмите на кнопку ниже, чтобы перейти на страницу авторизации. 👇",
+                parse_mode="HTML",
+                reply_markup=keyboard
+            )
+        else:
+            await callback.message.edit_text("❌ Не удалось получить ссылку для авторизации. Попробуйте позже.")
+
+    await callback.answer()
+
+
+@router.callback_query(F.data == "teacher_disconnect_calendar")
+async def teacher_disconnect_calendar(callback: CallbackQuery, state: FSMContext):
+    telegram_id = callback.from_user.id
+    role = await ensure_auth(telegram_id, callback)
+
+    if not role or role != "teacher":
+        await callback.answer("Доступно только для преподавателей.", show_alert=True)
+        return
+
+    success = await TSUProfile.disconnect_calendar(telegram_id)
+
+    data = await state.get_data()
+    origin = data.get("profile_origin")
+
+    back_callback = f"menu_profile:{origin}" if origin else "menu_profile"
+
+    if success:
+        await TSUProfile.set_calendar_connected(telegram_id, False)
+
+        keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data=back_callback)]
         ])
         await callback.message.edit_text(
             "✅ <b>Google Calendar отключен</b>",

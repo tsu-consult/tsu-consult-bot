@@ -91,13 +91,17 @@ class TSUProfile:
         status_text = status_translation.get(status, status)
 
         if role == "teacher":
+            is_calendar_connected = await TSUProfile.is_calendar_connected(telegram_id)
+            calendar_status = "✅" if is_calendar_connected else "❌"
+
             profile_text = (
                 f"👤 <b>Мой профиль</b>\n\n"
                 f"🪪 <b>Имя:</b> {first_name} {last_name}\n"
                 f"📞 <b>Телефон:</b> {phone_display}\n"
                 f"💬 <b>Telegram:</b> {username or '—'}\n"
                 f"🎓 <b>Роль:</b> Преподаватель\n"
-                f"📌 <b>Статус:</b> {status_text}"
+                f"📌 <b>Статус:</b> {status_text}\n"
+                f"📅 <b>Google Calendar:</b> {calendar_status}"
             )
         elif role == "dean":
             profile_text = (
@@ -109,7 +113,7 @@ class TSUProfile:
             if show_email:
                 profile_text += f"📧 <b>Email:</b> {email}\n"
 
-            is_calendar_connected = await self.is_calendar_connected(telegram_id)
+            is_calendar_connected = await TSUProfile.is_calendar_connected(telegram_id)
             calendar_status = "✅" if is_calendar_connected else "❌"
 
             profile_text += (

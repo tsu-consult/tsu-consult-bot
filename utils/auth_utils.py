@@ -16,8 +16,13 @@ async def ensure_auth(telegram_id: int, obj: Message | CallbackQuery) -> str | N
             return None
 
     if role:
+        commands = [BotCommand(command="/home", description="Главное меню")]
+
+        if role == "teacher":
+            commands.append(BotCommand(command="/todos", description="Управление задачами"))
+
         await obj.bot.set_my_commands(
-            commands=[BotCommand(command="/home", description="Главное меню")],
+            commands=commands,
             scope=BotCommandScopeChat(chat_id=obj.message.chat.id if isinstance(obj, CallbackQuery) else obj.chat.id)
         )
 
