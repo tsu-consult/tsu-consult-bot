@@ -23,7 +23,7 @@ async def cmd_todos(message: Message):
     last_name = user_profile.get("last_name", "") if user_profile else ""
     user_name = f"{first_name} {last_name}".strip() or "Пользователь"
 
-    text = f"Добро пожаловать, {user_name}!\n\n📋 <b>Управление задачами</b>"
+    text =f"👨‍🏫 Добро пожаловать, {user_name}"
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
@@ -58,7 +58,7 @@ async def show_teacher_tasks_menu(callback: CallbackQuery):
     last_name = user_profile.get("last_name", "") if user_profile else ""
     user_name = f"{first_name} {last_name}".strip() or "Пользователь"
 
-    text = f"Добро пожаловать, {user_name}!\n\n📋 <b>Управление задачами</b>"
+    text = f"👨‍🏫 Добро пожаловать, {user_name}"
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [

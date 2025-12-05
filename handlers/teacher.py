@@ -7,6 +7,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, Message
 
 from handlers.student_and_teacher import show_requests_page
+from handlers.tasks_menu import show_teacher_tasks_menu
 from keyboards.main_keyboard import show_main_menu
 from services.consultations import consultations
 from services.profile import profile
@@ -1990,9 +1991,16 @@ async def teacher_cancel_create_task(callback: CallbackQuery, state: FSMContext)
     except TelegramBadRequest:
         pass
 
-    await asyncio.create_task(answer_and_delete(callback.message, "❌ Создание задачи отменено.", delay=5))
+    cancel_message = await callback.message.answer("❌ Создание задачи отменено.")
 
-    await show_main_menu(callback, role)
+    await show_teacher_tasks_menu(callback)
+
+    await asyncio.sleep(5)
+    try:
+        await cancel_message.delete()
+    except TelegramBadRequest:
+        pass
+
     await callback.answer()
 
 
@@ -2887,9 +2895,16 @@ async def teacher_cancel_create_task(callback: CallbackQuery, state: FSMContext)
     except TelegramBadRequest:
         pass
 
-    await asyncio.create_task(answer_and_delete(callback.message, "❌ Создание задачи отменено.", delay=5))
+    cancel_message = await callback.message.answer("❌ Создание задачи отменено.")
 
-    await show_main_menu(callback, role)
+    await show_teacher_tasks_menu(callback)
+
+    await asyncio.sleep(5)
+    try:
+        await cancel_message.delete()
+    except TelegramBadRequest:
+        pass
+
     await callback.answer()
 
 
