@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from aiogram import Router, F, types
@@ -5,6 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 import config
+from handlers.tasks_menu import show_teacher_tasks_menu, show_teacher_tasks_menu_message
 from keyboards.main_keyboard import show_main_menu
 from services.profile import profile, TSUProfile
 from states.edit_profile import EditProfile
@@ -43,29 +45,55 @@ async def edit_profile_callback(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer("Введите новое имя и фамилию 👇\n\nПример: <b>Иван Иванов</b>\n\n⚠️ Внимание! Указывайте реальные имена и фамилии", parse_mode="HTML")
     await state.set_state(EditProfile.name)
     await callback.answer()
+
+
 @router.message(EditProfile.name)
 async def edit_profile_name(message: Message, state: FSMContext):
     telegram_id = message.from_user.id
     new_name = message.text.strip()
+
+    if not new_name:
+        await message.answer("❗ Пожалуйста, введите имя и фамилию.")
+        return
 
     parts = new_name.split(maxsplit=1)
     first_name = parts[0]
     last_name = parts[1] if len(parts) > 1 else ""
 
     success = await profile.update_profile(telegram_id, first_name, last_name)
-    success_msg = None
-
-    if success:
-        success_msg = await message.answer("Успешно ✅")
-    else:
-        await answer_and_delete(message, "❌ Не удалось обновить имя. Попробуйте позже.")
 
     data = await state.get_data()
     origin = data.get("profile_origin")
 
-    await state.update_data(status_msg_id=success_msg.message_id)
+    if success:
+        success_msg = await message.answer("Успешно ✅")
 
-    await show_profile(message, telegram_id, origin=origin)
+        success_msg_id = success_msg.message_id
+
+        await state.clear()
+
+        await state.update_data(status_msg_id=success_msg_id)
+
+        await show_profile(message, telegram_id, edit_message=None, origin=origin)
+    else:
+        await state.clear()
+
+        error_msg = await message.answer("❌ Не удалось обновить имя. Попробуйте позже.")
+
+        if origin == "tasks_menu":
+            await show_teacher_tasks_menu_message(message)
+        else:
+            role = await ensure_auth(telegram_id, message)
+            await show_main_menu(message, role)
+
+        async def delete_after():
+            await asyncio.sleep(2)
+            try:
+                await error_msg.delete()
+            except:
+                pass
+
+        await asyncio.create_task(delete_after())
 
 
 @router.callback_query(F.data == "resubmit_teacher_request")
