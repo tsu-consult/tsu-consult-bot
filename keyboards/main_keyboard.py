@@ -146,10 +146,10 @@ async def show_main_menu(obj: types.Message | types.CallbackQuery, role: str | N
         greeting = f"🏛️ Добро пожаловать, {first_name} {last_name}."
 
         if status == "active":
-            keyboard = get_dean_menu()
+            keyboard = dean_menu
         else:
             greeting += "\n\n⏳ Ваш аккаунт деканата находится на рассмотрении администратора.\nПока доступны только основные функции." if status == "pending" else "\n\n❌ Ваша заявка на аккаунт деканата была отклонена.\nПока доступны только основные функции."
-            keyboard = get_dean_unconfirmed_menu()
+            keyboard = dean_unconfirmed_menu
     else:
         greeting = "👋 Привет!\n\nЧтобы продолжить, зарегистрируйтесь или войдите в систему 👇"
         keyboard = guest_menu
