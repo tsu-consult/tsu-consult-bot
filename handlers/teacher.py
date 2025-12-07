@@ -13,7 +13,7 @@ from services.consultations import consultations
 from services.profile import profile
 from services.tasks import tasks_service
 from states.create_consultation import CreateConsultationFSM
-from states.create_task import CreateTaskFSM
+from states.create_task import CreateTeacherTaskFSM
 from states.update_task import UpdateTaskFSM
 from utils.auth_utils import ensure_auth
 from utils.consultations_utils import format_date_verbose
@@ -1609,7 +1609,7 @@ async def teacher_start_create_task(callback: CallbackQuery, state: FSMContext):
         return
 
     await state.clear()
-    await state.set_state(CreateTaskFSM.waiting_for_title)
+    await state.set_state(CreateTeacherTaskFSM.waiting_for_title)
 
     try:
         await callback.message.delete()
@@ -1620,7 +1620,7 @@ async def teacher_start_create_task(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.message(CreateTaskFSM.waiting_for_title)
+@router.message(CreateTeacherTaskFSM.waiting_for_title)
 async def teacher_handle_task_title(message: Message, state: FSMContext):
     title = (message.text or "").strip()
     if not title:
@@ -1628,7 +1628,7 @@ async def teacher_handle_task_title(message: Message, state: FSMContext):
         return
 
     await state.update_data(title=title)
-    await state.set_state(CreateTaskFSM.waiting_for_description)
+    await state.set_state(CreateTeacherTaskFSM.waiting_for_description)
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="⏭️ Пропустить", callback_data="teacher_task_skip_description")]
@@ -1636,10 +1636,10 @@ async def teacher_handle_task_title(message: Message, state: FSMContext):
     await message.answer("Введите описание задачи 👇", reply_markup=keyboard)
 
 
-@router.callback_query(F.data == "teacher_task_skip_description", CreateTaskFSM.waiting_for_description)
+@router.callback_query(F.data == "teacher_task_skip_description", CreateTeacherTaskFSM.waiting_for_description)
 async def teacher_skip_task_description(callback: CallbackQuery, state: FSMContext):
     await state.update_data(description="")
-    await state.set_state(CreateTaskFSM.waiting_for_deadline_date)
+    await state.set_state(CreateTeacherTaskFSM.waiting_for_deadline_date)
 
     try:
         await callback.message.delete()
@@ -1656,11 +1656,11 @@ async def teacher_skip_task_description(callback: CallbackQuery, state: FSMConte
     await callback.answer()
 
 
-@router.message(CreateTaskFSM.waiting_for_description)
+@router.message(CreateTeacherTaskFSM.waiting_for_description)
 async def teacher_handle_task_description(message: Message, state: FSMContext):
     description = (message.text or "").strip()
     await state.update_data(description=description)
-    await state.set_state(CreateTaskFSM.waiting_for_deadline_date)
+    await state.set_state(CreateTeacherTaskFSM.waiting_for_deadline_date)
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="⏭️ Пропустить", callback_data="teacher_task_skip_deadline")]
@@ -1671,14 +1671,14 @@ async def teacher_handle_task_description(message: Message, state: FSMContext):
     )
 
 
-@router.callback_query(F.data == "teacher_task_skip_deadline", CreateTaskFSM.waiting_for_deadline_date)
+@router.callback_query(F.data == "teacher_task_skip_deadline", CreateTeacherTaskFSM.waiting_for_deadline_date)
 async def teacher_skip_task_deadline(callback: CallbackQuery, state: FSMContext):
     await state.update_data(deadline=None, reminders=[])
     await teacher_show_task_confirmation(callback, state)
     await callback.answer()
 
 
-@router.message(CreateTaskFSM.waiting_for_deadline_date)
+@router.message(CreateTeacherTaskFSM.waiting_for_deadline_date)
 async def teacher_handle_task_deadline_date(message: Message, state: FSMContext):
     date_input = (message.text or "").strip()
 
@@ -1707,11 +1707,11 @@ async def teacher_handle_task_deadline_date(message: Message, state: FSMContext)
 
     date_iso = dt.strftime("%Y-%m-%d")
     await state.update_data(deadline_date=date_iso)
-    await state.set_state(CreateTaskFSM.waiting_for_deadline_time)
+    await state.set_state(CreateTeacherTaskFSM.waiting_for_deadline_time)
     await message.answer("Введите время дедлайна в формате ЧЧ:ММ (например, 14:30) 👇")
 
 
-@router.message(CreateTaskFSM.waiting_for_deadline_time)
+@router.message(CreateTeacherTaskFSM.waiting_for_deadline_time)
 async def teacher_handle_task_deadline_time(message: Message, state: FSMContext):
     time_input = (message.text or "").strip()
 
@@ -1752,7 +1752,7 @@ async def teacher_handle_task_deadline_time(message: Message, state: FSMContext)
         return
 
     await state.update_data(deadline=deadline_iso)
-    await state.set_state(CreateTaskFSM.waiting_for_reminders_choice)
+    await state.set_state(CreateTeacherTaskFSM.waiting_for_reminders_choice)
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✅ Использовать напоминания по умолчанию", callback_data="teacher_task_reminders_default")],
@@ -1786,7 +1786,7 @@ async def teacher_handle_reminders_none(callback: CallbackQuery, state: FSMConte
 @router.callback_query(F.data == "teacher_task_reminders_custom")
 async def teacher_handle_reminders_custom(callback: CallbackQuery, state: FSMContext):
     await state.update_data(selected_reminders=[])
-    await state.set_state(CreateTaskFSM.waiting_for_custom_reminders)
+    await state.set_state(CreateTeacherTaskFSM.waiting_for_custom_reminders)
     await teacher_show_reminders_selection(callback, state)
     await callback.answer()
 
@@ -1837,7 +1837,7 @@ async def teacher_show_reminders_selection(callback: CallbackQuery, state: FSMCo
         await callback.message.answer(text, reply_markup=keyboard)
 
 
-@router.callback_query(F.data.regexp(r"^teacher_task_reminder_toggle_(\d+)$"), CreateTaskFSM.waiting_for_custom_reminders)
+@router.callback_query(F.data.regexp(r"^teacher_task_reminder_toggle_(\d+)$"), CreateTeacherTaskFSM.waiting_for_custom_reminders)
 async def teacher_handle_reminder_toggle(callback: CallbackQuery, state: FSMContext):
     telegram_id = callback.from_user.id
     role = await ensure_auth(telegram_id, callback)
@@ -1860,7 +1860,7 @@ async def teacher_handle_reminder_toggle(callback: CallbackQuery, state: FSMCont
     await callback.answer()
 
 
-@router.callback_query(F.data == "teacher_task_reminder_confirm", CreateTaskFSM.waiting_for_custom_reminders)
+@router.callback_query(F.data == "teacher_task_reminder_confirm", CreateTeacherTaskFSM.waiting_for_custom_reminders)
 async def teacher_handle_reminder_confirm(callback: CallbackQuery, state: FSMContext):
     telegram_id = callback.from_user.id
     role = await ensure_auth(telegram_id, callback)
@@ -1884,7 +1884,7 @@ async def teacher_handle_reminder_confirm(callback: CallbackQuery, state: FSMCon
     await callback.answer()
 
 
-@router.callback_query(F.data == "teacher_task_reminder_back", CreateTaskFSM.waiting_for_custom_reminders)
+@router.callback_query(F.data == "teacher_task_reminder_back", CreateTeacherTaskFSM.waiting_for_custom_reminders)
 async def teacher_handle_reminder_back(callback: CallbackQuery, state: FSMContext):
     telegram_id = callback.from_user.id
     role = await ensure_auth(telegram_id, callback)
@@ -1892,7 +1892,7 @@ async def teacher_handle_reminder_back(callback: CallbackQuery, state: FSMContex
         await callback.answer("Доступно только для преподавателей.", show_alert=True)
         return
 
-    await state.set_state(CreateTaskFSM.waiting_for_reminders_choice)
+    await state.set_state(CreateTeacherTaskFSM.waiting_for_reminders_choice)
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✅ Использовать напоминания по умолчанию", callback_data="teacher_task_reminders_default")],
@@ -1975,7 +1975,7 @@ async def teacher_show_task_confirmation(callback: CallbackQuery, state: FSMCont
         [InlineKeyboardButton(text="❌ Отмена", callback_data="teacher_cancel_create_task")]
     ])
 
-    await state.set_state(CreateTaskFSM.confirming)
+    await state.set_state(CreateTeacherTaskFSM.confirming)
 
     try:
         await callback.message.edit_text(summary, reply_markup=keyboard)
@@ -2579,7 +2579,7 @@ async def teacher_handle_reminders_none(callback: CallbackQuery, state: FSMConte
 @router.callback_query(F.data == "teacher_task_reminders_custom")
 async def teacher_handle_reminders_custom(callback: CallbackQuery, state: FSMContext):
     await state.update_data(selected_reminders=[])
-    await state.set_state(CreateTaskFSM.waiting_for_custom_reminders)
+    await state.set_state(CreateTeacherTaskFSM.waiting_for_custom_reminders)
     await teacher_show_reminders_selection(callback, state)
     await callback.answer()
 
@@ -2630,7 +2630,7 @@ async def teacher_show_reminders_selection(callback: CallbackQuery, state: FSMCo
         await callback.message.answer(text, reply_markup=keyboard)
 
 
-@router.callback_query(F.data.regexp(r"^teacher_task_reminder_toggle_(\d+)$"), CreateTaskFSM.waiting_for_custom_reminders)
+@router.callback_query(F.data.regexp(r"^teacher_task_reminder_toggle_(\d+)$"), CreateTeacherTaskFSM.waiting_for_custom_reminders)
 async def teacher_handle_reminder_toggle(callback: CallbackQuery, state: FSMContext):
     telegram_id = callback.from_user.id
     role = await ensure_auth(telegram_id, callback)
@@ -2653,7 +2653,7 @@ async def teacher_handle_reminder_toggle(callback: CallbackQuery, state: FSMCont
     await callback.answer()
 
 
-@router.callback_query(F.data == "teacher_task_reminder_confirm", CreateTaskFSM.waiting_for_custom_reminders)
+@router.callback_query(F.data == "teacher_task_reminder_confirm", CreateTeacherTaskFSM.waiting_for_custom_reminders)
 async def teacher_handle_reminder_confirm(callback: CallbackQuery, state: FSMContext):
     telegram_id = callback.from_user.id
     role = await ensure_auth(telegram_id, callback)
@@ -2677,7 +2677,7 @@ async def teacher_handle_reminder_confirm(callback: CallbackQuery, state: FSMCon
     await callback.answer()
 
 
-@router.callback_query(F.data == "teacher_task_reminder_back", CreateTaskFSM.waiting_for_custom_reminders)
+@router.callback_query(F.data == "teacher_task_reminder_back", CreateTeacherTaskFSM.waiting_for_custom_reminders)
 async def teacher_handle_reminder_back(callback: CallbackQuery, state: FSMContext):
     telegram_id = callback.from_user.id
     role = await ensure_auth(telegram_id, callback)
@@ -2685,7 +2685,7 @@ async def teacher_handle_reminder_back(callback: CallbackQuery, state: FSMContex
         await callback.answer("Доступно только для преподавателей.", show_alert=True)
         return
 
-    await state.set_state(CreateTaskFSM.waiting_for_reminders_choice)
+    await state.set_state(CreateTeacherTaskFSM.waiting_for_reminders_choice)
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✅ Использовать напоминания по умолчанию", callback_data="teacher_task_reminders_default")],
@@ -2768,7 +2768,7 @@ async def teacher_show_task_confirmation(callback: CallbackQuery, state: FSMCont
         [InlineKeyboardButton(text="❌ Отмена", callback_data="teacher_cancel_create_task")]
     ])
 
-    await state.set_state(CreateTaskFSM.confirming)
+    await state.set_state(CreateTeacherTaskFSM.confirming)
 
     try:
         await callback.message.edit_text(summary, reply_markup=keyboard)
