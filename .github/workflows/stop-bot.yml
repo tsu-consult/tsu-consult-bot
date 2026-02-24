@@ -1,0 +1,24 @@
+﻿name: TSU Consult Bot – Stop services
+
+on:
+  workflow_dispatch: {}
+
+env:
+  DEPLOY_USERNAME: 'deployuser'
+
+jobs:
+  stop-bot:
+    runs-on: ubuntu-latest
+    environment: Production
+
+    steps:
+      - name: 🛑 Stop TSU Consult Bot container
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ env.DEPLOY_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "🛑 Stop and remove TSU Consult Bot container..."
+            docker stop tsu-consult-bot || true
+            docker rm tsu-consult-bot || true
